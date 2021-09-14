@@ -111,5 +111,54 @@ git clone <YOUR REPOSITORY SSH URL>
 ``` bash
 docker build .
 ```
+or, if it doesn't work:
+``` bash
+sudo docker build .
+```
 
 >Note: *It builds which ever **Dockerfile** is in the root of our project that we're currently in.*
+
+## docker-compose configuration
+
+>Note: *Docker compose is a tool that allows us to run our Docker image easily from our project location. So it allows us to easily manage the different services that make up our project. So for example one service might be the python application that we run. Another service might be the database.*
+
+1. Create a new file in our project's root directory called *docker-compose.yml*:
+
+>Note: *This is a yaml file that contains the configuration for all of the services that make up our project.*
+
+- *version: "3"* -  version of Docker compose that we're going to be writing our file for.
+
+- Next we define the services that make up our application. Right now we only need one service for our Python Django application:
+
+``` yml
+services:
+  app:
+    build:
+      context: .
+```
+What this says is we're going to have a service called *app* and the build section of the configuration we're going to set the context to is *"."* which is our current directory that we're running docker-compose from.
+
+``` yml
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app
+    command: >
+      sh -c "python manage.py runserver 0.0.0.0:8000"
+```
+#### ports
+In this part we're going to map our project from port 8000 on our host to port 8000 on our image.
+
+#### volumes
+Volume allows us to get the updates that we make to our project into our Docker image in real time. So it maps of volume from our local machine here into our Docker container that will be running our application. It maps the *app* directory which we have in our project to the *app* directory in our Docker image. This means that whenever we change a file or we change something in the project it'll be automatically updated in the container and we don't need to restart Docker to get the changes into effect.
+
+#### command
+This is the command that is used to run our application in our Docker container. It says "shell, run command, which is python manage.py runserver 0.0.0.0:8000". So this will run the Django development server available on all the IP addresses that run on the Docker container. It's going to run on port 8000 which is going to be mapped through the ports configuration to our local machine. So we can run our application and we can connect to it on port 8000 on our local machine.
+
+2. Open terminal and navigate to the project's directory, then type:
+
+``` bash
+docker-compose build
+```
+
+What this does is it builds our image using the Dock compose configuration.
