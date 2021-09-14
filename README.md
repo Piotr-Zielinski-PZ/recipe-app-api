@@ -160,5 +160,9 @@ This is the command that is used to run our application in our Docker container.
 ``` bash
 docker-compose build
 ```
+or, if it doesn't work:
+``` bash
+sudo docker-compose build
+```
 
 What this does is it builds our image using the Dock compose configuration.
