@@ -153,7 +153,7 @@ In this part we're going to map our project from port 8000 on our host to port 8
 Volume allows us to get the updates that we make to our project into our Docker image in real time. So it maps of volume from our local machine here into our Docker container that will be running our application. It maps the *app* directory which we have in our project to the *app* directory in our Docker image. This means that whenever we change a file or we change something in the project it'll be automatically updated in the container and we don't need to restart Docker to get the changes into effect.
 
 #### command
-This is the command that is used to run our application in our Docker container. It says "shell, run command, which is python manage.py runserver 0.0.0.0:8000". So this will run the Django development server available on all the IP addresses that run on the Docker container. It's going to run on port 8000 which is going to be mapped through the ports configuration to our local machine. So we can run our application and we can connect to it on port 8000 on our local machine.
+This is the command that is used to run our application in our Docker container. It says "shell, run command, which is `python manage.py runserver 0.0.0.0:8000`". So this will run the Django development server available on all the IP addresses that run on the Docker container. It's going to run on port 8000 which is going to be mapped through the ports configuration to our local machine. So we can run our application and we can connect to it on port 8000 on our local machine.
 
 2. Open terminal and navigate to the project's directory, then type:
 
@@ -185,6 +185,6 @@ We run commands using docker-compose by typing `docker-compose run` and then the
 We're going to run the command on *app* and then anything we pass in after is going to be the command that gets run on the Linux container that we've created using our Docker file.
 We type `run sh -c` so it runs a shell script. We pass in a command in speech marks.
 
->Note: *The reason we use `<sh -c>` is because it makes it very clear to see the command that we're running versus all the Docker compose command.*
+>Note: *The reason we use `sh -c` is because it makes it very clear to see the command that we're running versus all the Docker compose command.*
 
 Finally the command `django-admin.py startproject app .` just runs the Django admin management command that comes when we install Django which we do via our **requirements.txt**. It runs the `startproject` command which starts a new project called *app* and using *"."* we say to start the project in our current location because this process is going to run on our Docker container. It's going to base it from the last **WORKDIR** that we set in our Dockerfile.
