@@ -181,10 +181,10 @@ or, if it doesn't work:
 sudo docker-compose run app sh -c "django-admin.py startproject app ."
 ```
 
-We run commands using docker-compose by typing `<docker-compose run>` and then the name of the service that we want to run the command on. This is if you have multiple services. Here we only have one service so we're just going to use our service called *app*.
+We run commands using docker-compose by typing `docker-compose run` and then the name of the service that we want to run the command on. This is if you have multiple services. Here we only have one service so we're just going to use our service called *app*.
 We're going to run the command on *app* and then anything we pass in after is going to be the command that gets run on the Linux container that we've created using our Docker file.
-We type `<run sh -c>` so it runs a shell script. We pass in a command in speech marks.
+We type `run sh -c` so it runs a shell script. We pass in a command in speech marks.
 
 >Note: *The reason we use `<sh -c>` is because it makes it very clear to see the command that we're running versus all the Docker compose command.*
 
-Finally the command `<django-admin.py startproject app .>` just runs the Django admin management command that comes when we install Django which we do via our **requirements.txt**. It runs the `<startproject>` command which starts a new project called *app* and using *"."* we say to start the project in our current location because this process is going to run on our Docker container. It's going to base it from the last **WORKDIR** that we set in our Dockerfile. 
+Finally the command `django-admin.py startproject app .` just runs the Django admin management command that comes when we install Django which we do via our **requirements.txt**. It runs the `startproject` command which starts a new project called *app* and using *"."* we say to start the project in our current location because this process is going to run on our Docker container. It's going to base it from the last **WORKDIR** that we set in our Dockerfile.
