@@ -47,12 +47,11 @@ gh ssh-key add key-file --title "personal laptop"
 1. Start by heading over to [GitHub](github.com) and just click on **new** button which takes you to the page that allows you to create a new repository.
 
 2. Customize your repository:
-
-  2. Give your repository the name.
-  2. Give it the description.
-  2. You can choose to initialize your project with **README** file.
-  2. Check the *gitignore* file and choose **Python**.
-  2. For the license you can choose a *MIT license*.
+* Give your repository the name.
+* Give it the description.
+* You can choose to initialize your project with **README** file.
+* Check the *gitignore* file and choose **Python**.
+* For the license you can choose a *MIT license*.
 
 3. When you're done click *create repository* and what this will do is create a repository and take you to the repository page.
 
