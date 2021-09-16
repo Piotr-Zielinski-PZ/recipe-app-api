@@ -188,3 +188,69 @@ We type `run sh -c` so it runs a shell script. We pass in a command in speech ma
 >Note: *The reason we use `sh -c` is because it makes it very clear to see the command that we're running versus all the Docker compose command.*
 
 Finally the command `django-admin.py startproject app .` just runs the Django admin management command that comes when we install Django which we do via our **requirements.txt**. It runs the `startproject` command which starts a new project called *app* and using *"."* we say to start the project in our current location because this process is going to run on our Docker container. It's going to base it from the last **WORKDIR** that we set in our Dockerfile.
+
+## Travis-CI
+
+*Travis is a really useful continuous integration tool that lets us automate some of the tests and checks on our project every time we push it to Github. For example every time we push a change to GithHub we can make it run our Python unit tests and our Python linting so if there is any issues with our code we can see straight away via an email notification that the build is broken*
+
+1. Firstly, enable Travis-CI for project:
+
+- head over to [Travis-CI website](travis-ci.com),
+
+- sign up or sign in with your GitHub account.
+
+>Note: *if GitHub projects weren't automatically pulled over to Travis-CI use a guide shown on Travis-CI dashboard.*
+
+2. Secondly, create Travis-CI configuration file:
+
+*Configuration file is the file that tells Travis what to do every time we push a change to our project.*
+
+- create a new file in our project's root directory called *.travis.yml*,
+
+- the first line of our Travis file is what *language* Travis should expect our project to be in. Next we  specify the *version* of the language:
+
+``` yml
+language: python
+python:
+  - "3.6"
+```
+
+- next we're going to tell Travis what *services* we need to use. We're just need the Docker service and all of the subservices are going to be contained within our *docker-compose.yml* file and our *Dockerfile* configuration:
+
+``` yml
+services:
+  - docker
+```
+
+- next we specify a *before_script* which is a script that Travis will run before it executes any of the automation commands that we're going to input next. So before it runs anything we need to install docker compose by typing:
+
+``` yml
+before_script: pip install docker-compose
+```
+
+- next we specify the script in which we're going to run our *docker-compose* command for running our tests:
+
+``` yml
+script:
+  - docker-compose run app sh -c "python manage.py test && flake8"
+```
+
+We run our linting tool which we're going to install in our project. Linting tool is going to be called *flake8* so we're gonna run it every time we push a change to GitHub. Travis is going to spin up a Python server running Python 3.6 so it's going to make the docker service available. It's going to use pip to install docker-compose and then finally it's going to run our script and if this exits with a failure then it will fail the build and it will send us a notification.
+
+3. Next, add *flake8* linting tool to **requirements.txt**:
+
+>Note: *you can look up the latest version of *flake8* on pypi*.
+
+- type *flake8>=3.6.0.<3.7.0* - it installs flake8's version equal to or higher than 3.6.0 but less than 3.7.0.
+
+- next we add a *flake8* config and we do that in our Python project, which is *app* where we create new file called *.flake8*:
+  - add *[flake8]* at the beginning of the file,
+  - in next line we add some *exclusions* because we're going to exclude some of the automated scripts and tools that are created by Django (Django work to a 100 character limit whereas we will work with 79 character limit). We exclude all the Django stuff so it doesn't fail on the linting when we run our project.
+
+  ``` flake8
+  exclude =
+    migrations,
+    __pycache__,
+    manage.py,
+    settings.py
+  ```
