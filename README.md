@@ -298,3 +298,15 @@ class CountTests(TestCase):
 ```
 
 - launch up terminal, go to *app* directory and type `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"`.
+
+## Creating a core app
+
+The first thing we're going to do is we're going to create a **core** app which will hold all of the central code that is important to the rest of the sub apps. It's going to create anything that is shared between one or more apps like migrations, database. We will put this all in the **core** module just so it's all in one place and it's very clear where the kind of central point of all these things is.
+
+1. Delete *count.py* and *tests.py*.
+
+2. Launch up a terminal and type `docker-compose run app sh -c "python manage.py startapp core"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py startapp core"`.
+
+3. Inside *core* app folder delete *views.py* and *tests.py*.
+
+4. Create a *tests* folder inside *core* app folder and create there *__init\__.py* file.
