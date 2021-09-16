@@ -254,3 +254,47 @@ We run our linting tool which we're going to install in our project. Linting too
     manage.py,
     settings.py
   ```
+
+## Creating a simple unit test
+
+1. First, create a file in *app* directory called *count.py* in which put a simple function, like so:
+
+``` Python
+def add(x, y):
+    """Add two numbers together."""
+    return x + y
+```
+
+2. Now create in the same folder a *tests.py* file in which we will be putting all our tests:
+
+>Note: *The Django unit test framework looks for any files that begin with tests and it basically uses them as the tests when we run the Django run unit tests command. So we want to make sure that any tests are in a folder or a file name that begins with tests*.
+
+- first thing we're gonna do in our *tests.py* is we're gonna import the Django **TestCase**,
+
+>Note: *The TestCase is a class that comes with Django that basically has a bunch of helper functions that help us test our Django code*.
+
+- next we're going to import the function that we're going to test,
+
+- create a class called after the class that we want to test which will inherit from the TestCase,
+
+- inside this class create a testing function which starts with *"test"*,
+
+- inside our function we're going to use an assertion.
+
+*So a test is setup of two components: the setup stage where we setup our function for tests and assertion stage where we actually test the output - we confirm that the output equals what we expected it to equal.*
+
+Here's how *test.py* should looks like:
+``` Python
+from django.test import TestCase
+from app.count import add
+
+
+class CountTests(TestCase):
+    """Testing calculation."""
+
+    def test_add_numbers(self):
+        """Test that two numbers are added together."""
+        self.assertEqual(add(3, 8), 11)
+```
+
+- launch up terminal, go to *app* directory and type `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"`.
