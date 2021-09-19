@@ -554,7 +554,7 @@ user = self.model(email=self.normalize_email(email), **extra_fields)
 
 *normalize_email* is a helper function that comes with the *BaseUserManager*.
 
-2. Save this test file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+2. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
 
 ##### Updating **create_user** method in **UserManager** class (rising ValueError)
 
@@ -567,7 +567,7 @@ if not email:
 
 We raise a *ValueError* and pass there a message.
 
-2. Save this test file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+2. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
 
 ##### Creating **create_superuser** method in **UserManager** class
 
@@ -601,4 +601,4 @@ def create_superuser(self, email, password):
       return user
 ```
 
-6. Save this test file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+6. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
