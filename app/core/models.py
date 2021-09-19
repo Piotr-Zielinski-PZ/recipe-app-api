@@ -4,6 +4,7 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, \
 
 
 class UserManager(BaseUserManager):
+    """Manage creating new users."""
 
     def create_user(self, email, password=None, **extra_fields):
         """Create and save new user."""
@@ -16,7 +17,7 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, password):
-        """Creates and saves new superuser."""
+        """Create and save new superuser."""
         user = self.create_user(email, password)
         user.is_staff = True
         user.is_superuser = True

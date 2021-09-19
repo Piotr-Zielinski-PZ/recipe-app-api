@@ -301,6 +301,8 @@ class CountTests(TestCase):
 
 ## Creating a core app
 
+#### Preparing the environment
+
 The first thing we're going to do is we're going to create a **core** app which will hold all of the central code that is important to the rest of the sub apps. It's going to create anything that is shared between one or more apps like migrations, database. We will put this all in the **core** module just so it's all in one place and it's very clear where the kind of central point of all these things is.
 
 1. Delete *count.py* and *tests.py*.
@@ -310,3 +312,293 @@ The first thing we're going to do is we're going to create a **core** app which 
 3. Inside *core* app folder delete *views.py* and *tests.py*.
 
 4. Create a *tests* folder inside *core* app folder and create there *__init\__.py* file.
+
+5. Go to the *settings.py* and add *core* to the **INSTALLED_APPS** list.
+
+Now that we have our *core app* we'll create our custom user model. Since we're working with test-driven development we're going to write our test first and then we're going to implement our model afterwards.
+
+#### Creating tests
+
+##### Testing creating new user when the email is successful
+
+1. First, go into our *tests* folder and create a new file called *test_models.py*.
+
+We'll be testing if our helper function for our model is able to create a new user. So we're going to use the *create_user_function* to create a user and then we're going to verify that the user has been created as expected.
+
+2. Inside, import *TestCase* class and *get_user_model*:
+
+``` Python
+from django.test import TestCase
+from django.contrib.auth import get_user_model
+```
+
+3. Create test class called *ModelTests*. Next, inside this test class we're going to create our test case which is function called *test_create_user_with_email_successful*.
+
+4. Now let's set up our test so what we're gonna do is we're simply going to pass in a email address and a password and then we're going to verify that that user has been created and that the email address is correct and the password is correct.
+
+``` Python
+def test_create_user_with_email_successful(self):
+    """Test creating new user when the email is successful."""
+    email = 'test00@outlook.com'
+    password = '12345678'
+    user = get_user_model().objects.create_user(
+        email=email,
+        password=password
+    )
+
+    self.assertEqual(user.email, email)
+    self.assertTrue(user.check_password(password))
+```
+
+We're calling the *create_user* function on the *UserManager* for our user model that we're going to create in a next step.
+
+We also want to make sure that the email address in our created user equals the email address we passed in. We can't check the password the same way like we did checking an email. This is because the password is encrypted so we can only check it using the *check_password* function on our user model.
+
+5. Save this test file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command. We expect this test to fail because we haven't created the feature yet.
+
+###### Next proceed creating **create_user** method in **UserManager** class.
+
+##### Testing if the email for new user is normalized
+
+Now that we have our *create_user* function we can add a new feature to the function to normalize the email address that the users sign up with. It's not a required step but it is recommended because the second part of the user domain name for email addresses should be case-insensitive. We're going to make that part all lowercase every time a new user registers.
+
+1. Inside *ModelTests* class in *test_models.py* add new function called *test_new_user_email_normalized*.
+
+2. Inside this function create an email variable all uppercase for the domain part.
+
+3. Below, let's create our user and for the password we're just gonna add a random string.
+
+4. Next let's use an assertion:
+
+``` Python
+self.assertEqual(user.email, email.lower())
+```
+
+so whole test function should looks like this:
+
+``` Python
+def test_new_user_email_normalized(self):
+      """Test the email for new user is normalized."""
+      email = 'test@OUTLOOK.COM'
+      user = get_user_model().objects.create_user(email, 'test123')
+
+      self.assertEqual(user.email, email.lower())
+```
+
+5. Save this test file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+###### Next proceed updating **create_user** method in **UserManager** class.
+
+##### Testing creating user with no email raises error
+
+Next we're going to add validation to ensure that an *email* field has actually been provided when the *create_user* function is called. We want to make sure that if we call the create_user function and we don't pass an email address (so if we just pass a blank string or we just pass a non value) we want to make sure we raise a *ValueError* that says the email address was not provided.
+
+1. Inside *ModelTests* class in *test_models.py* add new function called *test_new_user_invalid_email*.
+
+2. Type:
+
+``` Python
+with self.assertRaises(ValueError):
+      get_user_model().objects.create_user(None, 'test123')
+```
+
+Anything that we run in here should raise the value error. And if it doesn't raise a *ValueError* then this test will fail.
+
+3. Save this test file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+###### Next proceed updating **create_user** method in **UserManager** class.
+
+##### Testing creating new superuser
+
+Now that we have our *create_user* function finished there's just one more function that we need to add to our user model manager and that is the *create_superuser* function. *create_superuser* is a function used by the Django CLI when we're creating new users using the command line. So we want to make sure it's included in our custom *User* model so that we can take advantage of the Django management command for creating a superuser.
+We are going to test test that a superuser is created when we call *create_superuser* and that it is assigned the **is_staff** and the **is_superuser** settings.
+
+1. Inside *ModelTests* class in *test_models.py* add new function called *test_create_new_superuser*.
+
+2. Below this let's create our user with `user = get_user_model().objects.create_superuser()` and inside *create_superuser* pass an email address and password.
+
+3. Next let's take care of assertion, so let's type:
+
+``` Python
+self.assertTrue(user.is_superuser)
+self.assertTrue(user.is_staff)
+```
+
+The reason why we didn't add *is_superuser* field in our *User* model but we add it here is *is_superuser* is included as part of the *PermissionsMixin*.
+
+Final code should looks like this:
+
+``` Python
+def test_create_new_superuser(self):
+      """Test creating new superuser."""
+      user = get_user_model().objects.create_superuser(
+          'test@outlook.com',
+          'test123'
+      )
+
+      self.assertTrue(user.is_superuser)
+      self.assertTrue(user.is_staff)
+```
+
+3. Save this test file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+###### Next proceed creating **create_superuser** method in **UserManager** class.
+
+#### Creating models
+
+##### Creating **create_user** method in **UserManager** class
+
+When we call *create_user* it'll create a new user model, it'll set the password and it'll save the model and then it'll return the user model that it has just created.
+
+
+1. Alright so load up the models.py and import the *AbstractBaseUser* the *BaseUserManager* and the *PermissionsMixin*.
+
+``` Python
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+```
+
+2. Next we create our *UserManager* class. The manager class is a class that provides the helper functions for creating a **user** or creating a **superuser**.
+
+So let's type class *UserManager* and let's extend the *BaseUserManager* - we're going to pull in all of the features that come with the *BaseUserManager* but we're going to override a couple of the functions to handle our email address instead of the username that this class expects:
+
+``` Python
+class UserManager(BaseUserManager):
+    """Manage creating new users."""
+```
+
+3. Now lets create function *create_user* and the first argument is *self*, the second - *email*, third - *password=None* in case you want to create a user that is not active that doesn't have a password and the last argument will be _**extra_fields_.
+
+>Note: *any of the extra functions that are passed in when we call the create_user will be passed into extra fields so that we can then just add any additional fields that we create without user model*.
+
+4. Now, below our *create_user* definition let's create our user so let's type
+
+``` Python
+user = self.model(email = email, **extra_fields)
+```
+
+It's going to pass the email first and then it's going to pass anything extra that we add.
+
+>Note: *The way the management commands work is we can access the model that the manager is for by typing "self.model". This is effectively the same as creating a new user model and assigning it to the user variable*.
+
+5. Below this we are going to set the password. We can't set the password in this call because the password has to be encrypted. It's very important that the password is not stored in clear text. We do that by using the *set_password* helper function that comes with the Django *BaseUserManager* or the *AbstractBaseUser*.
+
+6. Next we're going to save the user so we're going to type *user.save()* and we're also use *using=self.db*. It's required to support multiple databases. Then finally we're going to return the user.
+
+Finally, our code should looks like:
+
+``` Python
+class UserManager(BaseUserManager):
+    """Manage creating new users."""
+
+    def create_user(self, email, password=None, **extra_fields):
+        """Create and save new user."""
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+
+        return user
+```
+
+So now we have the manager class let's go ahead and create our *User* model.
+
+##### Creating *User* model.
+
+1. Create *User* class and extend it by the *AbstractBaseUser* and the *PermissionsMixin*.
+
+It basically gives us all the features that come out of the box with the Django *User model* but we can then build on top of them and customize it to support our email address.
+
+2. Now we define the fields of our database model:
+
+``` Python
+email = models.EmailField(max_length=255, unique=True)
+name = models.CharField(max_length=255)
+is_active = models.BooleanField(default=True)
+is_staff = models.BooleanField(default=False)
+```
+
+3. Next we're going to assign the user manager to the objects attribute:
+
+``` Python
+objects = UserManager()
+```
+
+4. And then finally we're going to add the `USERNAME_FIELD = email` so by default the *username* field is *"username"* and we're customizing that to *"email"*.
+
+5. Next we will move on to our *settings.py* and we will customize our user model in here. Scroll down and type:
+
+``` Python
+AUTH_USER_MODEL = 'core.User'
+```
+
+So *core* is the name of our app and *User* is the name of the model in our app that we want to assign as the custom user model.
+
+6. Head back to the terminal and make migrations using `docker-compose run app sh -c "python manage.py makemigrations"` and then `docker-compose run app sh -c "python manage.py migrate"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py makemigrations"` and then `sudo docker-compose run app sh -c "python manage.py migrate"`.
+
+7. So now we have our migrations we can run our tests again using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+##### Updating **create_user** method in **UserManager** class (normalizing error)
+
+All we need to do for this is wrap our email with the normalized email function.
+
+1. We simply replace this line:
+
+``` Python
+user = self.model(email=email, **extra_fields)
+```
+
+with this line:
+
+``` Python
+user = self.model(email=self.normalize_email(email), **extra_fields)
+```
+
+*normalize_email* is a helper function that comes with the *BaseUserManager*.
+
+2. Save this test file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+##### Updating **create_user** method in **UserManager** class (rising ValueError)
+
+1. To implement this feature in our models go to the *create_user* method and between creating user object and the doc-string type:
+
+``` Python
+if not email:
+      raise ValueError('Users must have an email address!')
+```
+
+We raise a *ValueError* and pass there a message.
+
+2. Save this test file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+##### Creating **create_superuser** method in **UserManager** class
+
+1. Inside *UserManager* class create *create_superuser* method.
+
+2. Defining this method let's pass in *self*, *email* and *password*. Because we're only really going to be using the *create_superuser* with the command-line we don't need to worry about the extra fields.
+
+3. Below this let's create our user using our create_user function so we type:
+
+``` Python
+user = self.create_user(email, password)
+```
+
+4. At this point we have a user the same as the user that is created using *create_user* method so next we need to give him extra privileges:
+
+``` Python
+user.is_staff = True
+user.is_superuser = True
+```
+
+5. Then because we modified the user we need to save it and then finally we return the user so the final code should looks like:
+
+``` Python
+def create_superuser(self, email, password):
+      """Create and save new superuser."""
+      user = self.create_user(email, password)
+      user.is_staff = True
+      user.is_superuser = True
+      user.save(using=self._db)
+
+      return user
+```
+
+6. Save this test file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
