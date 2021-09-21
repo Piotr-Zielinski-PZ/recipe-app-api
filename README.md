@@ -317,7 +317,7 @@ The first thing we're going to do is we're going to create a **core** app which 
 
 Now that we have our *core app* we'll create our custom user model. Since we're working with test-driven development we're going to write our test first and then we're going to implement our model afterwards.
 
-#### Creating tests
+#### Creating model tests
 
 ##### Testing creating new user when the email is successful
 
@@ -602,3 +602,189 @@ def create_superuser(self, email, password):
 ```
 
 6. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+
+#### Creating admin tests
+
+We're going to update our Django admin so that we can manage our custom user model. This will give us a nice easy interface that we can use to log in and see which users have been created, create users ourselves or make changes to existing users. So as with anything with test-driven development we're going to start by adding the tests.
+
+##### Testing admin
+
+1. Let's go to our project and in the *tests* folder let's add a new file called *test_admin.py* - this is where we're going to store all of our admin page unit tests.
+
+2. Start by adding a few imports inside *test_admin.py* file:
+
+``` Python
+from django.test import TestCase, Client
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+```
+
+**reverse** is a helper function which allows us to generate URLs for our Django admin page.
+**Client** allows us to make test requests to our application in our unit tests.
+
+3. Create a test class called *AdminSiteTests* and we're going to inherit from *TestCase*.
+
+4. Then, the first thing we're going to do is we're going to create a *setUp* function. *setUp* function is ran before every test that we run. Sometimes there are setup tasks that have to be done before every test in our *TestCase* class. Our setup is going to consist of creating our test client. We're going to add a new user that we can use in tests. We're going to make sure the user is logged in and finally we're going to create a regular user that is not authenticated so we can use him to list him in our admin page.
+
+- `self.client = Client()` - makes a *client* variable accessible for other tests,
+
+- `self.admin_user = get_user_model().objects.create_superuser()` - creates *admin_user* object,
+
+- `self.client.force_login(self.admin_user)` - uses the *client* helper function that allows us to log a user in with the Django authentication,
+
+>Note: *This really helps make our tests a lot easier to write because it means we don't have to manually log the user in we can just use this helper function*.
+
+- `self.user = get_user_model().objects.create_user()` - creates *user* object.
+
+Okay so now we have a *client* and *admin*, the *admin* is logged into the *client* and we have a spare *user* that we can use for testing listing and things like that.
+Now let's create our first test - test that the users are listed in our Django admin. The reason we need to add a test for this is because we need to slightly customize the Django admin to work with our custom user model. As explained previously the default *User* model expects a *username* and as such the default Django *admin* for the *User* model also expects a *username* which we don't have. We just have the email address so we need to make a few small changes to our *admin.py* file just to make sure it supports our *custom user* model.
+
+1. Define new function inside *AdminSiteTests* class called *test_users_listed*.
+
+2. Create the URL using the *reverse* helper function so it will generate the URL for our list user page. The reason we use reverse function instead of just typing the URL manually is because if we ever want to change the URL in a future it means we don't have to go through and change it everywhere in our test because it should update automatically based on reverse.
+
+>Note: *to use reverse function we simply type the app that we're going for, ":" and the URL that we want*.
+
+3. `res = self.client.get(url)` - this will use our test *client* to perform a **HTTP GET** on the URL that we put inside the brackets.
+
+4. Finally, let's run some assertions:
+
+``` Python
+self.assertContains(res, self.user.name)
+self.assertContains(res, self.user.email)
+```
+
+The *AssertContains* assertion is a Django custom assertion that will check that our response (*res*) contains a certain item (*self.user.name*).
+*AssertContains* also has some additional checks that it does that are not quite clear from just these lines. It checks that the **HTTP response** was *HTTP 200*. It looks into the actual content of this response (*res*) and that's because if we manually output this response (*res*) it's just an object. *AssertContains* is intelligent enough to look into the actual output that is rendered and checks for the contents there.
+
+Finally, the *test_admin.py* should looks like:
+
+``` Python
+from django.test import TestCase, Client
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+
+
+class AdminSiteTests(TestCase):
+    """Test admin site."""
+
+    def setUp(self):
+        """Set up test environment."""
+        self.client = Client()
+        self.admin_user = get_user_model().objects.create_superuser(
+            email='admin@outlook.com',
+            password='test123'
+        )
+        self.client.force_login(self.admin_user)
+        self.user = get_user_model().objects.create_user(
+            email='test@outlook.com',
+            password='test1234',
+            name='test user full name'
+        )
+
+    def test_users_listed(self):
+        """Test that users are listed on user page."""
+        url = reverse('admin:core_user_changelist')
+        res = self.client.get(url)
+
+        self.assertContains(res, self.user.name)
+        self.assertContains(res, self.user.email)
+```
+
+5. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+We're going to update our Django admin to support changing our *user* model because there's still a few changes that we need to make to our Django admin class to support our custom user model. The *Edit* Page won't work in its current state. We're going to make some changes to make sure that it does work.
+
+1. Let's start by adding a test to *test_admin.py*; we're going to test that the *change page* renders correctly.
+
+>Note: *We don't actually need to test making posts and things like that to the change page because this is all part of the Django admin module and it's not recommended to test the dependencies of your project*.
+
+2. Create a new test called *test_user_change_page*.
+
+3. Generate a **URL** so `url = reverse('admin:core_user_change')` and this time we need to give it an argument - *self.user.id*. The reverse function will create a URL like this: *admin/core/user/7*.
+
+>Note: *Basically anything we pass as the second argument of reverse function will get assigned to the arguments of the URL at the end so that's how we customize the ID*.
+
+4. Type *res = self.client.get(url)* - so we're going to do an **HTTP GET** on the URL.
+
+5. Now, let's do some assertions:
+
+``` Python
+self.assertEqual(res.status_code, 200)
+```
+
+We test here if a *status code* for the **response** that our client gives is *HTTP 200* which is the status code for *"okay"* so that means the page worked.
+
+6. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+###### Next proceed modifying Django admin.
+
+#### Modifying admin
+
+1. Let's go over to our *admin.py* file.
+
+2. Let's make some imports:
+
+``` Python
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from core import models
+```
+
+3. Create class called *UserAdmin* and we're going to inherit from *BaseUserAdmin*.
+
+4. We need to change the *ordering* so we will set it to the *ID* of the object.
+
+5. The *list_display* we will set to the *email* and the *name* so we're going to list them by email and name.
+
+6. Now all we need to do is register our models.
+
+Finally, *admin.py* should looks like:
+
+``` Python
+from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from core import models
+
+
+class UserAdmin(BaseUserAdmin):
+    """Modifies user admin site."""
+
+    ordering = ['id']
+    list_display = ['email', 'name']
+
+
+admin.site.register(models.User, UserAdmin)
+```
+
+7. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+>Note: *we can't test the Django admin just yet because we still have to set up our database*.
+
+To implement changing our user model via admin site, therefore to access the *Edit* page we're going to add a *fieldsets* class variable.
+
+First we need to import the *gettext* function. This is the recommended convention for converting strings in our Python to human readable text and the reason we do this is just so it gets passed through the translation engine.
+
+To import **gettext** function type:
+
+``` Python
+from django.utils.translation import gettext as _
+```
+
+*fieldsets* variable:
+
+``` Python
+fieldsets = (
+    (None, {'fields': ('email', 'password')}),
+    (_('Personal Info'), {'fields': ('name', )}),
+    (
+        _('Permissions'),
+        {
+            'fields': ('is_active', 'is_staff', 'is_superuser')
+        }
+    ),
+    (_('Important dates'), {'fields': ('last_login', )})
+)
+```
+
+Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
