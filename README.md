@@ -694,6 +694,8 @@ class AdminSiteTests(TestCase):
 
 5. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
 
+###### Next proceed modifying admin.
+
 We're going to update our Django admin to support changing our *user* model because there's still a few changes that we need to make to our Django admin class to support our custom user model. The *Edit* Page won't work in its current state. We're going to make some changes to make sure that it does work.
 
 1. Let's start by adding a test to *test_admin.py*; we're going to test that the *change page* renders correctly.
@@ -718,7 +720,21 @@ We test here if a *status code* for the **response** that our client gives is *H
 
 6. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
 
-###### Next proceed modifying Django admin.
+###### Next proceed modifying admin (change site).
+
+There's one last thing we need to change in our Django admin before it will work with our custom user model and that is the **ADD page**. This is the page for adding new users in the Django admin.
+
+1. Head over to *test_admin.py* and let's add a new test called *test_create_user_page* with self parameter.
+
+2. Create the URLs - `url = reverse('admin:core_user_add')`.
+
+3. Below type `res = self.client.get(url)` so our test client is going to make a *HTTP GET* to this URL.
+
+4. Then just assert that the *status code* is 200, so type `self.assertEqual(res.status_code, 200)`.
+
+5. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+###### Next proceed modifying admin (add site).
 
 #### Modifying admin
 
@@ -761,6 +777,8 @@ admin.site.register(models.User, UserAdmin)
 
 >Note: *we can't test the Django admin just yet because we still have to set up our database*.
 
+##### Modifying admin (change site)
+
 To implement changing our user model via admin site, therefore to access the *Edit* page we're going to add a *fieldsets* class variable.
 
 First we need to import the *gettext* function. This is the recommended convention for converting strings in our Python to human readable text and the reason we do this is just so it gets passed through the translation engine.
@@ -785,6 +803,23 @@ fieldsets = (
     ),
     (_('Important dates'), {'fields': ('last_login', )})
 )
+```
+
+Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+##### Modifying admin (add site)
+
+After running tests we can head over to our *admin.py* and we add the *add_fieldsets* class variable. This is from the Django admin documentation - the user admin, by default, takes an *add_fieldsets* which defines the fields that we include on the **add page** which is the same as the **create user page**. We're going to customize this *fieldset* to include our email address, password and password 2. With that we can create a new user in the system with a very minimal data. Then if we want to add extra fields like the name and customize that stuff later we can do that in the **edit Page**.
+
+*add_fieldsets* variable:
+
+``` Python
+add_fieldsets = (
+      (None, {
+          'classes': ('wide', ),
+          'fields': ('password1', 'password2')
+      }),
+  )
 ```
 
 Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
