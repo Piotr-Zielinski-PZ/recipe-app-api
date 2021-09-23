@@ -11,4 +11,4 @@ before_install:
 before_script: pip install docker-compose
 
 script:
-  - echo $DOCKER_PASSWORD | sudo docker-compose run app sh -c "python manage.py test && flake8"
+  - echo $DOCKER_PASSWORD | docker-compose run app sh -c "python manage.py test && flake8"
