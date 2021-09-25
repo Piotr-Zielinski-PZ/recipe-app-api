@@ -299,7 +299,7 @@ class CountTests(TestCase):
 
 - launch up terminal, go to *app* directory and type `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"`.
 
-## Creating a core app
+## Creating a core app and setting up models.py
 
 #### Preparing the environment
 
@@ -603,6 +603,7 @@ def create_superuser(self, email, password):
 
 6. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
 
+## Setting up admin.py
 
 #### Creating admin tests
 
@@ -824,7 +825,7 @@ add_fieldsets = (
 
 Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
 
-#### Setting up database
+## Setting up database
 
 We're going to set up our Django project to use *Postgres* instead of the default *sqlite* database.
 
@@ -930,3 +931,115 @@ The first line is the database engine that we're going to use, so the engine is 
 Below, we add the host value, the database name, the username and the password and we pull in from environment variables. And the way we pull it in as an environment variable is we type *os.environ.get()* and inside the name of the environment variable from *docker-compose.yml* file.
 
 >Note: *the benefit of this solution is that we can easily change our configuration when we run our app on different servers by simply changing them in the environment variables. We don't have to make any changes to our source code in order to modify the hostname, the name, the username or the password. This makes it really useful when running our application in production because we can simply upload our Dockerfile to a service like Amazon ECS or kubernetes and we can just set the appropriate environment variables and then our application should work*.
+
+## Waiting for Postgres
+
+#### Mocking
+
+**Mocking** is an advanced area of testing. **Mocking** is when we override or change the behavior of the dependencies of the code that we're testing. We use **mocking** to avoid any unintended side effects and also to isolate the specific piece of code that we want to test.
+
+**Example**
+Imagine we're testing a function that sends an email.
+There are two good reasons that we wouldn't want to actually send an email every time we run our tests:
+
+- we should never write tests that depend on external services. This is because we can't guarantee that these services will be available at the point that we run the test and this would make the test unpredictable and unreliable,
+
+- we don't want to be sending spam emails each time we run our test.
+
+When we write our test we can use **mocking** to avoid sending an actual email. We can override the function in the dependency that sends the email and replace it with a *mock object*. Using this *mock object* we can avoid sending an actual email and instead just check that the function was called with the correct parameters.
+
+#### Test wait_for_db
+
+We're going add a **management command** to the *core* app of our Django project. The **management command** is going to be a helper command that allows us to wait for the database to be available before continuing and running other commands. We're going to use this command in our *docker-compose* file when starting our Django app. The reason that we need this command is because once the *Postgres* service has started there are a few extra setup tasks that need to be done on the *Postgres* before it is ready to accept connections. It means that our Django app will try and connect to our database before the database is ready and therefore it will fail with an exception.
+
+>Note: *To improve the reliability of our project we're going to add this helper command that we can put in front of all of the commands we've run in docker compose and that will ensure that the database is up and ready to accept connections before we try to access the database*.
+
+1. We're going to start by creating the unit test for our **command** which we will create in our *core -> tests* folder. Inside, create a new file called *test_commands.py*.
+
+2. The first thing we're going to *import* is the **patch function** from the *unittests.mock* module.
+
+This is going to allow us to *mock* the behavior of the Django *get_database* function. We can basically simulate the database being available and not being available when we test our command.
+
+3. Below, we're going to add the *call_command* function which would allow us to call the command in our source code.
+
+4. Next we're going to *import* the **OperationalError** that Django throws when the database is unavailable. And we're going to use this error to simulate the database being available or not when we run our command.
+
+5. Finally *import* **TestCase**.
+
+6. The first function we're going to create is simply going to test what happens when we call our command and the database is already available:
+
+- define function called *test_wait_for_db_ready*.
+
+To setup our test here we need to simulate the behavior of Django when the **database** is *available*. Our **management command** is going to *try and retrieve* the database connection from Django and it's going to check if (when we try and retrieve it) it retrieves an *OperationalError* or not. So basically if it retrieves an *OperationalError* then the database is not available. If an *OperationalError* is not thrown, then the database is available and the command will continue.
+
+- to setup our test we're going to override the behavior of the **ConnectionHandler** and we're just going to make it *return True* and not throw any exception. Therefore our *call_command* or our *management commands* should just continue and allow us to continue with the execution flow. Let's use the **patch** to *mock* the **ConnectionHandler** to just *return True* every time it's called,
+
+- `django.db.utils.ConnectionHandler` is the location of the code that is being called and the function that is actually called when we retrieve the database is **\__getitem__**. We're going to *mock* the behavior of **\__getitem__** using the *patch* which is assigned as a variable here *gi*,
+
+- the way we *mock* the behavior of a function is we type `gi.return_value = True`. This means that whenever this is called during our test execution it will override it and just replace it with a *mock object* which does two things:
+  - one of them is it will just return this value which is *True*,
+  - the second thing is it allows us to monitor how many times it was called.
+
+- type *call_command('wait_for_db')* so the *wait_for_db* is going to be the name of the management command that we create,
+
+- now, we can do the **assertions** of our test. We're going to check if **\__getitem__** was called once. So the way that we check that using our **mock object** is we type `self.assertEqual(gi.call_count, 1)`.
+
+>Note: *__return_value__ in __call_count__ are all options that we can set on a mock object*.
+
+7. The second test checks that the *wait_for_db* command will try the database five times and then on the sixth time it'll be successful and it will continue:
+
+- define function called *test_wait_for_db*.
+
+The way it's going to work is it's going to be a *while loop* that checks if the **ConnectionHandler** raises the *OperationalError* and if it does, it'll raise the *OperationalError* then it's going to wait a second and then try again.
+
+That delay is just to make sure that it doesn't flood the output by trying every microsecond to test for the database - it adds a little delay. We can actually remove that delay in our unit test by using decorators.
+
+- above function definition type `@patch('time.sleep', return_value=True)`. We add a **patch decorator** to our function and we're going to mock the *time.sleep*. When we use *patch* as a *decorator* we can  pass in the *return_value*. What it does is it's pretty much exactly the same thing as we've done in the *test_wait_for_db_ready* function, except we put it above the test that we're running. This decorator passes in what is the equivalent of *gi* from the *test_wait_for_db_ready* function. But for this to work we need to add the extra argument to the *function declaration* which is **ts** even though we're not using it we still need to pass it in because while running the test it will error because it'll have an unexpected argument. What this mock does is it replaces the behavior of *time.sleep* and just replaces it with a **mock function** that *returns True*. So that means during our test it won't actually wait the second. The reason we do this is simply just to speed up the test,
+
+- next type `with patch('django.db.utils.ConnectionHandler.__getitem__') as gi:` to mock the behavior of the *\__getitem__* and inside type:
+  - `gi.side_effect = [OperationalError] * 5 + [True]` to add the *side-effect* to the function that we're mocking. This *side-effect* is going to raise the *OperationalError* five times and then on the sixth time it's not going to raise the error and then the call should complete, it will just return.
+  - now we call our command `call_command('wait_for_db')`,
+  - assert that this function has been called six times using `self.assertEqual(gi.call_count, 6)`.
+
+8. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+#### Add wait_for_db command
+
+1. To create our *wait_for_db* management command we're going to start by creating the directory in our **core** app that we are going to store our management commands. So inside *core* app folder create *management* folder and inside this create *commands* folder and *\__init__.py* file and inside *commands* folder create another *\__init__.py* file and finally *wait_for_db.py*
+
+>Note: *This __init__.py file let's Django know that this folder a Python module*.  
+
+2. Start by importing **time** module so we can use it to make our applications sleep for a few seconds in between each database check. Let's also import the **connections** module which we can use to test if the database connection is available. Next we're going to import the **OperationalError** that Django will throw if the database isn't available. Finally we're going to import **BaseCommand** which is the class that we need to build on in order to create our custom command.
+
+3. Let's create command class and following convention let's name it *Command* and it will inherit from **BaseCommand** class.
+
+4. Create function called *handle*, so the *handle* function is what is ran whenever we run this management command. The arguments for *handle* are **self** and then **\*args** and then **\**options**.
+
+>Note: *args and options allow us passing in custom arguments and options to our management commands so if we wanted to let's say customize the wait time or something we could do that as an option*.
+
+We're going to check if the database's available and then once it's available we're going to cleanly exit so that whichever command we want to run next we can run knowing that the database is ready.
+
+5. Next we can actually print things out to the screen during these management commands using `self.stdout.write` and then in the brackets we can write a message to be shown on the screen, like "Waiting for database...".
+
+6. Next we're going to assign a variable called *db_conn* (which is short for database connection) to *None*.
+
+7. In next step we create while loop:
+
+``` Python
+while not db_conn:
+        try:
+            db_conn = connections['default']
+        except OperationalError:
+            self.stdout.write('Database unavailable, waiting 1 second')
+            time.sleep(1)
+```
+
+So what this does is while **database connection** (*db_conn*) equals *False* try to set up the **database connection**. If it tried and it set it to the *connection* and the *connection* is unavailable then Django raises the **OperationalError**. So if Django raises the **OperationalError**  we're going to catch that and we're going to output the message "*Database unavailable, waiting 1 second*". Next we're going to sleep for one second. So it just basically pauses the execution for a second and then it will try again and start from the beginning. It will continue this process until the database is finally available in which case this code won't be called and it will just exit.
+
+8. We're going to add one more thing to our function which is just a final message. Type:
+
+`self.stdout.write(self.style.SUCCESS('Database available!'))`
+
+We can wrap our message it in a *success style* which will output the message in a green color just to indicate that the output was successful.
+
+9. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
