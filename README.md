@@ -1043,3 +1043,44 @@ So what this does is while **database connection** (*db_conn*) equals *False* tr
 We can wrap our message it in a *success style* which will output the message in a green color just to indicate that the output was successful.
 
 9. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run app sh -c "python manage.py test"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py test"` command.
+
+#### Make docker-compose wait for database
+
+We can now configure *docker-compose* to use the *wait_for_db* command before it starts our Django app.
+
+1. Heading over to the *docker-compose* file.
+
+2. Go to our **app** service and inside **command** block add the *wait_for_db* command and we call it using the **manage.py**. So let's type:
+
+``` yml
+command: >
+  sh -c "python manage.py wait_for_db &&
+          python manage.py migrate &&
+          python manage.py runserver 0.0.0.0:8000"
+```
+
+We're adding one more command before the service starts and that is the **migrate** command. This will run our database migrations on our database so it will create any tables that are required for our app.
+
+3. Go to terminal and type `docker-compose up`.
+
+#### Solving problem with Travis CI not waiting for database
+
+###### Error:
+
+```
+django.db.utils.OperationalError: could not connect to server: Connection refused
+556	Is the server running on host "db" (172.18.0.2) and accepting
+557	TCP/IP connections on port 5432?
+558
+559ERROR: 1
+560The command "docker-compose run app sh -c "python manage.py test && flake8"" exited with 1.
+```
+
+###### Solution:
+
+To solve the problem, update your *.travis-ci.yml* file so the **script:** command is:
+`- docker-compose run app sh -c "python manage.py wait_for_db && python manage.py test && flake8"`
+
+#### Creating admin account
+
+To create admin account simply head over to your terminal and type `docker-compose run app sh -c "python manage.py createsuperuser"` and this should start a new process in Docker. Fill in the required fields and you can now head over to admin panel.
