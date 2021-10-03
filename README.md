@@ -1084,3 +1084,363 @@ To solve the problem, update your *.travis-ci.yml* file so the **script:** comma
 #### Creating admin account
 
 To create admin account simply head over to your terminal and type `docker-compose run app sh -c "python manage.py createsuperuser"` and this should start a new process in Docker. Fill in the required fields and you can now head over to admin panel.
+
+## Create user management endpoints
+
+In this section we're going to create our **manage user endpoints**. These **endpoints** are going to allow us to *create users*, to *update users*, to *change a user's password* and to *create user authentication tokens* which can be used to authenticate requests to the other APIs in our project.
+
+#### Create user app
+
+1. Load up the terminal and navigate to **app** folder. Then type `docker-compose run --rm app sh -c "python manage.py startapp users"` (or if it doesn't work use superuser credentials).
+
+>Note: *__--rm__ removes the container after running the command. We can include this optionally on any commands that we want to run once so the docker container doesn't slow down the system after it's ran. So basically if we add the __--rm__ command it should remove the container and just keep the system a little cleaner so it doesn't fill up*.
+
+2. Once the *users* app is started we're just going to do some cleanup:
+
+- remove *migrations.py* because we're going to keep all of them within the **core** app,
+
+- remove the *admin.py* because we're also going to keep them in the **core** app,
+
+- remove the *models.py* because, again, they're in the **core** app,
+
+- finally remove *tests.py* because we're going to create a new subfolder for tests,
+
+- create a new *\__init__.py* file inside *test* folder like so: *tests/\__init__.py*.
+
+3. Open up our app *settings.py* and inside **INSTALLED_APPS**, above the *core* app add Django *rest_framework*. Below that enable the *authtoken* app as well which we are going to be using to authenticate with Django *rest_framework* later. So below *rest_framework* type *rest_framework.authtoken*. Then, finally, below the *core* app enable our **users** app.
+
+#### Add tests for create user API
+
+The first API that we're going to create in our **users** project is the *create users API* so we're going to start by adding some unit tests to *test creating users* and different scenarios when we give different post requests.
+
+1. Inside our *users* app go to *tests* folder and create *test_user_api.py* test file.
+
+2. Start by importing:
+
+- *TestCase*,
+
+- *get_user_model* because we're going to be needing the user model for out tests,
+
+- *reverse* so we can generate our API URLs,
+
+Then we're going to import some rest framework test helper tools:
+
+- *APIClient* a test client that we can use to make requests to our API and then check what the response is,
+
+- *status* this is a module that contains some status codes that we can see in human readable form so instead of just typing **200** it's **HTTP_200_OK**... it just makes the tests a little bit easier to read and understand.
+
+3. It's good practice at the beginning of any API test to create either a *helper function* or a *constant variable* for our URL that we're going to be testing. We'll be testing the *create user URL* so let's create a variable for that called *CREATE_USER_URL*.
+
+>Note: *we call this variable in all caps, because it's just a naming convention for anything we expect to be a constant. With Python it doesn't matter whether this is uppercase or lowercase we're still going to be able to change the value. This is just to understand that we don't expect this value to change during our tests*.
+
+By typing `CREATE_USER_URL = reverse('user:create')` we're going to use *reverse* to reverse our *user create URL* and this should create the *user create* URL and assign it to **CREATE_USER_URL** variable.
+
+4. Add a helper function that we can use to *create* an *example users* for our tests.
+
+>Note: *We create a helper function for anything that we do multiple times in different tests so instead of creating the user for each test individually we can just call the helper function and it just makes it a little bit easier to create users that we're testing with*.
+
+Our function is going to be called *create_user* so let's type `def create_user` and in the arguments add the __**params__ so this is a dynamic list of arguments. We can basically add as many arguments as we want. Then we can pass them directly into the *create_user* function inside the **UserManager** model so we have a lot of flexibility about the fields that we can assign to the users that we create for our samples.
+
+Next type: `return get_user_model().objects.create_user(**params)`.
+
+**get_user_model()** will *retrieve the user model* so then the *objects.create_user()* with _**params_ passed in is just a function to create a user with these parameters. This solution makes the lines a little bit shorter because we're just creating users and we don't have to type all this out, we can just call create_user().
+
+5. Now we can create our *test class* and the class we're going to create is called **PublicUserApiTests** and it's going to inherit from *TestCase*.
+
+>Note: *the reason we call it __public__ is because we separate our API tests into public and private tests. It's just keeps the tests clean because then in our setup we can have one test that authenticates and one that doesn't authenticate:
+ - public API is one that is unauthenticated so anyone from the Internet can make a request, for example "creating a user" because when we create a user on a system usually we're creating a user because you haven't got authentication set up already.
+ - private API might be "modifying the user" or "change the password". For those types of requests we would expect to be authenticated*.
+
+6. Inside **PublicUserApiTests** class we're going to add:
+
+- **setUp** function in which we're going to type `self.client = APIClient()` and this is just to call our client in our test so every single test we run we don't need to manually create this API client, we just have one client for our test suite that we can reuse for all of the tests,
+
+- **test_create_valid_user_success** to create a test that validates the user with its payload is created successfully:
+  - **payload** is the object that we pass to the API when we make the *request*. We're going to test that if we pass in all the correct fields then the user is created successfully. So what we're going to need to create a user is the email, password and a name, so these are the fields in our *payload*,
+  - next thing we're going to do is we're going to make our *request*. So we make our requests by typing `res = self.client.post()` and we pass inside the URL we specified previously so the *CREATE_USER_URL* and payload. This will do a *HTTP POST* request to our client, to our URL, for creating users,
+  - to create *assertions* we need to ask ourselves a question "what do we expect from this?". Well the first thing is we expect a *HTTP_201_CREATED* response from the API so we type `self.assertEqual(res.status_code, status.HTTP_201_CREATED)`,
+  - next we're going to test that the object is actually created so type `user = get_user_model().objects.get(**res.data)` so when we do a *HTTP POST* and *create a user* we expect to see the created user object that's returned in the API along with *HTTP_201_CREATED* status code. We do _**res.data_ to take the dictionary response (which should have an additional ID field) and we just pass it in as the parameters for the *GET*. Then, if this *GET*s the user successfully then we know that the user is actually being created properly,
+  - now we can do `self.assertTrue` to test our password, so type: `self.assertTrue(user.check_password(payload['password']))`,
+  - finally we want to check that the password is not returned as part of this object and we do that by doing `self.assertNotIn('password', res.data)` so we simply check if the password is in our request data.
+
+- next we're going to test what happens if we try and create a user but the user already exists so we're trying to create duplicate user. To do that create a test function called *test_user_exists*:
+  - **payload** we're going to give is an email and a password,
+  - then we create our user using our handy *create_user* function and we pass in "unpacked" payload (using _**payload_). So _**payload_ will pass in email equals the email we specified inside our *payload*, password equals our password also from *payload*. Using __*__ just make our code a little less wordy so there's a few less characters there,
+  - now we can make the request so we'll type `res = self.client.post(CREATE_USER_URL, payload)`, we also pass in the payload,
+  - using **HTTP POST** in our *request* all we expect is a **HTTP_400_BAD_REQUEST**. This is a *bad request* because the user already exists, so we type `self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)`.
+
+- before we implement our API there is one more test left, which is *test if the password is too short*. With this we're going to add a password restriction, because we want passwords to be over a certain limit we don't want them really short. For this we'll create a function to test that the password is more than 5 characters long. So let's create a test called *test_password_too_short*:
+  - create a *payload* with an email, name and password but this time we'll give it a really short password, like "pw",
+  - create a POST request for our *CREATE_USER_URL*, so let's type `res = self.client.post(CREATE_USER_URL, payload)`,
+  - we want to first make sure that it returns a **HTTP_400_BAD_REQUEST**. So type `self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)`,
+  - then let's check that the user was never created. To do that we simply create a user object: `user_exists = get_user_model().objects.filter(email=payload['email']).exists()`. We search for any user with email address from our *payload* using *filter()* and then we'll just do *.exists()*. So if the user exists it will return true otherwise it will return false. Therefore, next we'll use `self.assertFalse(user_exists)` so we expect that **user_exists** would be *False* because we don't want the user to exist.
+
+>Note: *every single test that is run refreshes the database so every user that was created in each test is not going to be accessible in any other test; each test basically starts anew*.
+
+7. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add create user API
+
+Next we're going to implement our *create_user* API to make our tests pass. We're going to create a **serializer** for our *create_user request* and then we're going to create a **view** which will handle the request and then we're going to wire this up to a **URL** which will allow us to access the API and also make our tests pass.
+
+1. Start by creating a *serializers.py* file in the **user** app. This is where we're going to store our *serializers* for our user:
+
+- start by importing:
+  - *get_user_model* because we're going to need the **user model** to create our model serializer,
+  - *serializers* module from the REST framework.
+
+- create our serializer class called **UserSerializer** and we're going to inherit from the *serializers.ModelSerializer* because we're basing our serializer from a model. Django REST framework has a built-in serializer in which we just need to *specify the fields* that we want from our module and it does the database conversion for us. It also helps with the *creating* and *retrieving* from the database. With a **ModelSerializer** all we need to do is specify the *Meta class* inside the serializer and then:
+  - `model = get_user_model()` to specify the model that we want to base our *ModelSerializer* from.  Remember to include the brackets at the end, because we want to call the *get_user_model()* so it actually returns the user model class,
+  - `fields = ('email', 'password', 'name')` to specify the *fields* that we want to include in serializer. These fields are going to be *converted* to *JSON* while making our **HTTP POST** and then we will *retrieve* that in our *view* and finally we'll *save* it to a model. So we want these *fields* to be accessible in the API either to *read* or *write*. These are the fields that we're going to accept when we create users,
+  - `extra_kwargs = {'password': {'write_only': True, 'min_length': 5}}` it allows us to configure a few extra settings in our model sterilizer and what we're going to use this for is to ensure that the password is write only and that the minimum required length is 5 characters.
+
+- after configuring *Meta* class we need to create a function to create users. The *create* function is the function that's called when we create a new object. So define a function called **create** with *self* and *validated_data* arguments. In this function we're going to override the *create function*:
+  - `return get_user_model().objects.create_user(**validated_data)` we're calling the *create_user* function from our *model* because by default it only calls the *create* function and we want to use our *create_user* from model **UserManager** to create the user. We do all this to be sure that the password that it stores will be encrypted. Otherwise, using the default *create* function, the password that it sets will just be the clear-text-password that we pass in and then the authentication won't work because it's expecting an encrypted key. We use _**validated_data_ to unwind this variable into the parameters of the *create_user* function. What Django REST framework does is when we're ready to create the user it will call our *create* function that we just created and it will pass in the *validated_data*. The *validated_data* will contain all of the data that was passed into our **serializer** which would be the *JSON data* that was made in the *HTTP POST* and it passes it as the argument to the *create_user* function and then we can use that to create our user.
+
+2. Next let's update our *views.py*:
+
+- import:
+  - *UserSerializer* that we've just created,
+  - *generics* module provided by rest_framework,
+  - remove *render* module, because we're not going to need that.
+
+- create a new view class called *CreateUserView* which will inherit from **CreateAPIView** that comes with the Django REST framework from *generics* module. This view is pre-made for us and allows us to easily make a API that *creates* an object in a database using the serializer that we're going to provide. All we need to specify in this *view* is a *class variable* that points to the *serializer class* that we want to use to create the object. To do that simply type `serializer_class = UserSerializer`.
+
+3. Before we can actually access our API we need to *add a URL* and *wire the URL up to our view*. So we're going to create a new file in our **user** app called *urls.py* and inside:
+
+- import:
+  - the *path* function that comes with Django. This is a helper function that comes with Django that allows us to define different paths in our app,
+  - our *views.py*.
+
+- define *app_name* and call it *user*. We set it to help identify which app we're creating the URL from while using **reverse** function,
+
+- create **urlpatterns** and inside, with `path('create/', views.CreateUserView.as_view(), name='create'),` wire up this URL with our *view* and then set the *name* so that we can identify it when using the *reverse* lookup function.
+
+4. Finally, we need to update our main app *urls.py* to pass any user request to our **user**'s *urls.py*:
+
+- import *include* module that comes with *django.urls*,
+
+- add a new *path* below the **admin URL**: `path('api/user/', include('user.urls')),`.
+
+It says that any *request URL* that starts with *api/user* it's going to pass in to the *user.url* via  **include** function. **include** is just another *helper function* that helps to basically *define the URLs as a string*.
+
+It will identify the *user* app and it will get the *urls* module and then it will extend it using **include** function so any request that's passed in that matches *api/user* will then get passed on to our *urls.py* in **user** app and then if it matches *create* it will then get passed to our *views.py* which will then *render our API* so then we'll be able to *handle our API requests*.
+
+5. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add tests for creating a new token
+
+Next thing we're going to add to our **users** API is the *create token endpoint*. This is going to be an endpoint which we can use to make a **HTTP POST request**. We can *generate a temporary* **authtoken** that we can then *use to authenticate future requests* with the API. With our API we're going to be using **token authentication**. The way that we log in is we *use an API to generate* a **token** and then we *provide that token as the authentication header* for future requests which we want to authenticate. The benefit of this is _we don't need to send the user's **username** and **password** with every single request_ that we make. We just need to send it *once to create the token* and then we can *use that token for future requests*. If we ever want to revoke the token you can do that in the database.
+
+We're going to start by creating 4 **unit tests**:
+- to test that the *token is created okay*,
+- to test what happens if we *provide invalid credentials*,
+- to check if we're trying to *authenticate against a non-existent user*,
+- to check if we *provide a request that doesn't include a password*.
+
+We're going to add them to the **test_user_api.py** file.
+
+1. First, add URL which is going to be called `TOKEN_URL = reverse('user:token')`. This is going to be the URL that we're going to use to make the **HTTP POST request** *to generate our token*.
+
+2. Because the purpose of this API is *to start the authentication* we can just add it to our **PublicUserApiTests**. It's no need to make a new class so inside this create a new test function called:
+- **test_create_token_for_user** to *test that the token is created for the user*:
+  - first, create **payload** that we're going to use to test the API and pass in an *email* and *password*,
+  - **create a user** that matches this authentication so we can test against that user. We'll use our handy *create_user* helper function and pass in __**payload__: `create_user(**payload)`,
+  - **make request** and store it in a variable called *res*: `res = self.client.post(TOKEN_URL, payload)`,
+  - because we made a request for a login with the *email* and the *password* specified in **payload** so this exists as it is a part of our test we expect to get a **HTTP_200_OK** response and it should contain a token in the data response. Let's test for that `self.assertIn('token', res.data)` so it checks that there is a key called **token** in the **response's data** that we get back. next we can just assert that the response was a **HTTP_200_OK**, so let's **make an assertion** typing `self.assertEqual(res.status_code, status.HTTP_200_OK)`.
+
+- **test_create_token_invalid_credentials** to *test that token is not created if invalid credentials are given*:
+  - this time instead of creating a payload we're going to just **create the user** using *create_user()* function and simply pass in an *email* and *password*,
+  - **create payload** with the same *email* we used while creating a user and different *password*,
+  - **create request** and store it in a variable called *res* and pass there our **payload**: `res = self.client.post(TOKEN_URL, payload)`,
+  - we expect that **token doesn't exist in response's data** and when we make this request we'll expect the response to be **HTTP_400_BAD_REQUEST** because the password is incorrect so let's **make the assertions**: `self.assertNotIn('token', res.data)` and `self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)`.
+
+- **test_create_token_no_user** to *test that token is not created if user doesn't exist*:
+  - **create payload** with *email* and *password*,
+  - then we're going to **make a request without creating the user**, by typing `res = self.client.post(TOKEN_URL, payload)`,
+  - we expect there's **no token in response's data** and a **HTTP_400_BAD_REQUEST**, so let's **make the assertions**: `self.assertNotIn('token', res.data)` and `self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)`.
+
+- **test_create_token_missing_field** to *test that email and password are required*:
+  - **create request with payload defined inside** and store it in a variable called *res*: `res = self.client.post(TOKEN_URL, {'email': 'one', 'password': ''})`, we also set *password* to blank field,
+  - we expect this to fail with **no token in response's data** and a **HTTP_400_BAD_REQUEST**, so let's **make the assertions**: `self.assertNotIn('token', res.data)` and `self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)`.
+
+3. Save this file and let's head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add create token API
+
+1. Head over to our **serializers.py** where we're going to create our **AuthTokenSerializer**. So we're going to create a new serializer just based off the Django standard *serializers* module and we're going to use this for *authenticating our requests*:
+- add imports:
+  - **get_user_model**,
+  - **authenticate** function which comes with Django and *it's a Django helper command for working with the Django authentication system*. We simply pass in the *username* and *password* and we can authenticate a request,
+  - **ugettext_lazy as _** this is a translation module that comes from *django.utils.translation*.
+
+>Note: *whenever we're outputting any messages in the Python code that are going to be output to the screen it's a good idea to pass them through this translation system just so if we ever add any extra languages to our projects we can easily add the language file and it will automatically convert all of the text to the correct language*.
+
+- **create a new class** called **AuthTokenSerializer** and it will inherit from **serializers.Serializer**:
+  - **add an email and password** so for **email** simply type `email = serializers.CharField()` and for password we're going to *add a style* and *trim whitespace* because it's possible to have *whitespace* in our password like an extra space before or after and by default the Django the Django REST framework serializer will trim off this white space so for **password** type `password = serializers.CharField(style={'input_type': 'password'}, trim_whitespace=False)`,
+  - **add validate function** with *attrs* passed and which we're going to be validating. This function *is called when we validate our serializer*. This validation is basically checking that the inputs (*email* and *password*) are all correct. We are also going to validate that the *authentication credentials* are correct too. This **validate** function will be *based on the default token serializer* that comes with Django REST framework, we'll *modify it to accept our email address instead of username*.
+
+  ``` Python
+  def validate(self, attrs):
+        """Validate and authenticate the user."""
+        email = attrs.get('email')
+        password = attrs.get('password')
+
+        user = authenticate(
+            request=self.context.get('request'),
+            username=email,
+            password=password
+        )
+
+        if not user:
+            msg = _('Unable to authenticate with provided credentials')
+            raise serializers.ValidationError(msg, code='authentication')
+
+        attrs['user'] = user
+        return attrs
+  ```
+
+  First we retrieve an *email* and *password* from **attrs** that we passed into the function.
+
+  >Note: *__attrs__ parameter is basically just every field that makes up our serializer. Any field that makes up a sterilizer will get passed into the __validate__ function as dictionary and then we can retrieve the fields via these attributes. We can then validate whether we want to pass this validation or we want to fail the validation*.
+
+  Then we use **authenticate** function to authenticate our request:
+  - **first argument** is the *request* that we want to authenticate,
+
+  >Note: *this is how we basically access the context of the request that was made. We're going to pass this into our ViewSet and what the Django REST framework ViewSet does is when a request is made it passes the __context__ into the serializer in the context class variable and from that we can get ahold of the request that was made*.
+
+  - **second argument** is the *username* and we set it to **email** because the *username* is the name of the parameter required for the authenticate and we're authenticating via the *email address*,
+
+  - **third argument** is the *password* and we set it to **password**.
+
+  Then we __state the *if condition*__ `if not user` so *if authentication didn't work and we didn't return a user*, which is what happens if the authentication fails, we'll create the message that we're going to display to the user when they try and call the API. We also put a "*_*" before message to call translation function.
+
+  Next we **raise the validation error** and then the Django REST framework knows how to handle this error by passing the error as a *400 response* and sending a response to the user which describes message "unable to authenticate with provided credentials".
+
+  Finally, we **set our user in the attributes to the user object** and **return attributes**.
+
+  >Note: *whenever we're overriding the __validate__ function we must return the values at the end once the validation is successful*.
+
+2. Head over to the **views.py** where we'll _create a **create token view**_:
+
+- start by importing:
+  - **ObtainAuthToken** view which comes with Django REST framework. If we're authenticated using a *username* and *password* (as standard) it's very easy to just switch this on - we can just pass in the **ObtainAuthToken** view directly into our *urls*. Because we are customizing it slightly we need to just basically import it into our views and then extend it with a class and then make a few modifications to the class variables,
+  - **api_settings** which are from the Django REST framework,
+  - **AuthTokenSerializer**.
+
+- **create class view** called *CreateTokenView* which will inherit from *ObtainAuthToken*,
+
+- **set serializer class** so type `serializer_class = AuthTokenSerializer`,
+
+- **set a renderer class** which will set the renderer so we'll be able to view this endpoint in the browser with the browsable API. This means that we can basically login using browser and type in the *username* and *password*, click "POST" and then *it will return the token*: `renderer_classes = api_settings.DEFAULT_RENDERER_CLASSES`. We use the default ones because if we ever change the renderer class we can do that in the settings and it will update in our view automatically so we don't have to go through the view and change it.
+
+3. Head over to the **urls.py** inside *user* app and create new path `path('token/', views.CreateTokenView.as_view(), name='token'),`.
+
+4. Save all files and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+5. Go to the browser, go to **127.0.0.1:8000/api/user/create** and test creating new user. Then click **POST** and head over to **127.0.0.1:8000/api/user/token**, log in using created user, click **POST** and the token should be created successfully.
+
+#### Add tests for manage user endpoint
+
+The **manage user endpoint** will *allow the authenticated user to update their own profile* this includes **changing their name**, **changing their password**, and also **viewing their user object** so they can see what the values are currently set to.
+
+We're going to **start by adding tests** in our *test_user_api.py* file. We're going to do this within our **PublicUserApiTests** because we're going to test as if we are an *unauthenticated user*:
+
+1. **Add a URL** to the top of the page and we will call it `ME_URL = reverse('user:me')`.
+
+2. **Test that authentication is required for the endpoint**. It's recommend doing this because authentication required on an endpoint is quite an important part because it affects the security. **We don't want API's being made publicly by accident** and a great way to prevent against that is to **add unit tests to make sure that after any changes that we make those API's will always be private**:
+
+- **create test_retrieve_user_unauthorized** test to *test that authentication is required for users*,
+
+- **create HTTP GET request to ME_URL** so type `res = self.client.get(ME_URL)`,
+
+- we expect the error **HTTP_401_UNAUTHORIZED** to occur so **create an assertion** `self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)`.
+
+3. Next we're going to test that that *retrieving profile is successful* and test that _POST is not allowed on the **/me** endpoint_ we're just going to support PATCH and PUT to update it. Finally we're going to test *updating the user profile for authenticated user* using the API.
+
+>Note: *POST is used for creating objects and PUT and PATCH is usually used for editing objects. So we only want them to allow them to edit the endpoint*.
+
+**Create new test class** called **PrivateUserApiTests** which will inherit from *TestCase*. **Private** means that *authentication is required before we can use these endpoints*:
+
+- **create setUp function** which will *do the authentication for each test that we do*. So we don't need to set the authentication every single test, we're just doing the **setUp** and then that happens automatically before each test:
+  - **set up a user** _using `self.user = create_user()` helper function and passing in **password**, **email** and **name**_,
+  - **set up a client** *using `self.client = APIClient()`* to create a reusable client,
+  - **force authenticate method** to *authenticate any requests that the client makes with our sample user*, to do that type `self.client.force_authenticate(user=self.user)`.
+
+>Note: *__force_authenticate__ is a helper function that basically just makes it really easy to simulate making authenticated requests so whichever request we make with this client now will be authenticated with our sample user*.
+
+- **add test_retrieve_profile_success test** with which we'll be able to *test if we can retrieve the profile of the logged in user*:
+  - **make the HTTP GET request to ME_URL**, because we've already authenticated in our setup so we don't need to do that authentication, so type `res = self.client.get(ME_URL)`,
+  - **assert that we got a HTTP_200_OK** - `self.assertEqual(res.status_code, status.HTTP_200_OK)`,
+  - **assert that the user object returned is what we expect** - `self.assertEqual(res.data, {'name': self.user.name, 'email': self.user.email})` so test if the user got a **name** and an **email** and we get them from a **user** object. We exclude the password because sending a password even if it's hashed is never recommended.
+
+- **add test_post_me_not_allowed test** to *test that we cannot do a HTTP POST request on the profile for a __/me__ endpoint*:
+  - **make the HTTP POST request to ME_URL**, so type `res = self.client.post(ME_URL, {})` and we'll just post the empty object to test it,
+  - **assert that we get a HTTP_405_METHOD_NOT_ALLOWED**, so type `self.assertEqual(res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)`. This is the standard response when we try to do a HTTP method that is not allowed on the API.
+
+- **add test_update_user_profile test** so we're going to update the user via the API and we're going to *test that the updates worked for authenticated user*:
+  - **create a payload** with defined *name* and *password* and make sure that they're different from the values that we set in **setUp** for the default user to simply know that the test is working,
+  - **make the HTTP PATCH request to ME_URL** and pass in **payload**, so type `res = self.client.patch(ME_URL, payload)`
+  - **use the refresh_from_db()** helper function on our user *to update the user with the latest values from the database*,
+  - **verify that each of the values we provided was updated** so **assert that the name of the user is equal to name from payload** which is the new name we provided. Then **assert true on the check password methods** *to check the password*. To check **name** type: `self.assertEqual(self.user.name, payload['name'])` and to check **password** type: `self.assertTrue(self.user.check_password(payload['password']))`,
+  - we expect it to return **HTTP_200_OK** so **make sure that it returns the HTTP_200_OK** by typing: `self.assertEqual(res.status_code, status.HTTP_200_OK)`.
+
+4. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add manage user endpoint
+
+Now we can create our **manage user endpoint**. We're going to use our existing **UserSerializer** but we're going to add an additional function to the serializer for *updating our user object*. We're also going to add a custom view using the **RetrieveUpdateAPIView** from the Django REST framework **generic** API view options.
+
+1. **Head over to the views.py** file:
+
+- **import**:
+  - **authentication** and **permissions** classes from Django **rest_framework** and we're going to use them for our authentication and permissions of our user endpoint,
+
+- **create manage user views** called **ManageUserView** which inherits from **generics.RetrieveUpdateAPIView**:
+  - **create a serializer class attribute**, so type `serializer_class = UserSerializer`,
+  - next we'll **add two more class variables for authentication and permission**. **Authentication** *is the mechanism by which the authentication happens* and in our case we're going to use is token authentication. **Permissions** *are the level of access that the user has*, so the only permission we're going to add is that the user must be authenticated to use the API they don't have to have any special permissions they just have to be logged in. **Set these class variables**: `authentication_classes = (authentication.TokenAuthentication, )` for **authentication** and `permission_classes = (permissions.IsAuthenticated, )` for **permissions**,
+  - **add a get_object function to our API view**. Typically what would happen with an API view is we would link it to a model and **it could retrieve the item and we would retrieve data based models**. **In this case we're going to just get the model for the logged in user**. So we're going **to override the get_object() and return the user that is authenticated**.
+
+  To override the **get_object()** type:
+
+  ``` Python
+  def get_object(self):
+        """Retrieve and return authentication user."""
+        return self.request.user
+  ```
+
+  So when the **get_object()** is called the request will have the user attached to it because of the **authentication_classes**. The authentication class takes care of getting the authenticated user and assigning it to the request.
+
+2. Move on to **serializers.py** file, **locate UserSerializer** and below the **create** function we're going to **add an update** function. And the purpose of this is *we want to make sure the __password__ is set using the __set_password__ function instead of just setting it to whichever value is provided*. **Define update** function with **instance** and **validated_data** parameters:
+
+- **instance** is going to be the *model instance that is linked to our model sterializer* so it's going to be our **user object**,
+
+- **validated_data** is going to be these *fields that have been through the validation and ready to update*.
+
+So below our **update** function definition:
+
+- **remove the password from the validated_data** and we do that using the dictionary **pop** function, like so: `password = validated_data.pop('password', None)`. The reason we provide **None** is because *with the pop function we must provide a default value*. We need to provide a default value if password should not exist within our dictionary and because we're going to be allowing the users to optionally provide a password we'll leave this field as **None**,
+
+- **run the update request on the rest of our validated_data** so everything except the password will be updated for our user that we passed using **instance** argument. To do that type `user = super().update(instance, validated_data)`. With **super()** we're calling the model **serializers update functions**, which are the default one, so we can make use of all the functionality that's included in the default one and extend it slightly to customize it for our needs,
+
+- **set the password** using the *if statement* and **save()** the user object to *database*:
+
+``` Python
+if password:
+        user.set_password(password)
+        user.save()
+```
+
+So if the user provided a password then we use **set_password** for the **user** object and pass in the **password that comes from validated_data**. We do all that to simply not pass the plain text but to use specially designed methods for setting passwords,
+
+- finally **return a user**.
+
+3. Head over to **user**'s '**urls.py** and add new path for **/me** endpoint: `path('me/', views.ManageUserView.as_view(), name='me'),`.
+
+4. Save all files and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+5. Go to the browser, go to **127.0.0.1:8000/api/user/token** authenticate the user there. Then click **POST** and open up a **Mod Header** extension. **Copy generated token** and inside **Mode Header** create an **Authorization** header and pass in the `Token <COPIED TOKEN FROM 127.0.0.1:8000/api/user/token>`
+
+>Note: *__Mode Header__ allows us to modify the headers of the requests that we make so it makes it really easy to basically simulate and test authentication with our API*.
+
+Now **visit 127.0.0.1:8000/api/user/me** and we should see the user that we are authenticated with. **Test making changes** to any of our user's fields.
