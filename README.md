@@ -1718,7 +1718,7 @@ In this section we're going to **create our ingredients endpoint**. The ingredie
 
 5. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
 
-#### Add tests for listing ingredients.
+#### Add tests for listing ingredients
 
 Next we're going to add some tests for listing ingredients. Because we're going to create the same type of API that we created for our tags we're going to start by adding the unit tests.
 
