@@ -1681,3 +1681,153 @@ It will **filter all tags** with the user that is the authenticated user and wit
 It's very similar to the **get_queryset**, the **perform_create** function is a function that allows us to **hook into the create process** when creating an object. When we create object in our ViewSet **perform_create** function will be invoked and the **validated sterilizer** will be passed in as a *serializer argument* and then we can perform any modifications inside, that we'd like. All we're going to do is we're just going to do **serializer.save()** and **set the user to the authenticated user**.
 
 5. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+## Create ingredients endpoint
+
+In this section we're going to **create our ingredients endpoint**. The ingredients endpoint is going to be very similar to the *tags endpoint* in that it allows us to **create and list ingredients** which we can later assign to recipes for the purposes of *filtering*.
+
+#### Testing ingredient model
+
+1. Head over to the *core app* and the **test_models.py**.
+
+2. Add a new test to the bottom called **test_ingredient_str** to check that our model is converted correctly to a string representation:
+
+- **create a sample ingredient** by typing `ingredient = models.Ingredients.objects.create()` and to create an ingredient pass in the **user=sample_user()** and **name=<SAMPLE NAME>**,
+
+- to verify that the ingredient model exists that it works and that we can create and retrieve a model we'll **create an assertion**: `self.assertEqual(str(ingredient), ingredient.name)` to check if while converting ingredient to string it returns its name.
+
+3. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Creating ingredient model
+
+1. Head over to **models.py**.
+
+2. **create ingredient model called Ingredient**:
+
+- **create name** as *Charfield*,
+
+- **create user** using *ForeignKey* and pass in `settings.AUTH_USER_MODEL, on_delete=models.CASCADE`,
+
+- next we'll create function to handle string representation for this model's objects:
+  - inside **Ingredient** model create **\__str__** function,
+  - return `self.name`.
+
+3. Head back to the terminal and make migrations using `docker-compose run app sh -c "python manage.py makemigrations"` and then `docker-compose run app sh -c "python manage.py migrate"` or, if it doesn't work `sudo docker-compose run app sh -c "python manage.py makemigrations"` and then `sudo docker-compose run app sh -c "python manage.py migrate"`.
+
+4. Head over to **admin.py** and **register our new model** by typing `admin.site.register(models.Ingredient)`.
+
+5. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add tests for listing ingredients.
+
+Next we're going to add some tests for listing ingredients. Because we're going to create the same type of API that we created for our tags we're going to start by adding the unit tests.
+
+1. Create new test module in the *recipe app* called **test_ingredients_api.py**.
+
+2. **Import**:
+- **get_user_model** from *django.contrib.auth*,
+- **reverse** from *django.urls*,
+- **TestCase** from *django.test*,
+- **status** from *rest_framework*,
+- **APIClient** from *rest_framework.test*,
+- **Ingredient** from *core.models*,
+- **IngredientSerializer** from *recipe.serializers*.
+
+3. Create URL, so type: `INGREDIENTS_URL = reverse('recipe:ingredient-list')`, so we're also going to use a default router for our ingredients API and it's going to have the */list* in the URL name which is going to reference to our listing URL.
+
+4. **Add public class** for the public ingredients API test called **PublicIngredientsApiTests**:
+
+- add **setUp** function and inside define new client for test purposes `self.client = APIClient()`,
+
+- create new test function called **test_login_required** to test that to get the *INGREDIENTS_URL* the authenticated client is required:
+  - **create HTTP GET request to INGREDIENTS_URL** by typing `res = self.client.get(INGREDIENTS_URL)`,
+  - we expect it to return the *HTTP_401_UNAUTHORIZED* error, so **assert** `self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)`.
+
+5. Now we can then move on to testing listing our ingredients by **creating new private class** called **PrivateIngredientsApiTests**:
+
+- add **setUp**:
+  - **set up our client** by typing `self.client = APIClient()`,
+  - **create new user** by typing `self.user = get_user_model().objects.create()` and pass in an **email** and the **password**,
+  - **force authentication** on our client: `self.client.force_authentication(user=self.user)`.
+
+- **add unit test called test_retrieve_ingredient_list** to test retrieving ingredients:
+  - first let's create sample ingredients, so type: `Ingredient.objects.create(user=self.user, name='Kale')` and second ingredient: `Ingredient.objects.create(user=self.user, name='Salt')`,
+  - **create HTTP GET request to INGREDIENTS_URL**, so type: `res = self.client.get(INGREDIENTS_URL)`,
+  - next, we will verify that the returned result matches what we expect it to match. We'll basically retrieve all the ingredients, serialize them and then compare the result to the serialized ingredients. So type `ingredients = Ingredient.objects.all().order_by('-name')`,
+  - serialize retrieved ingredients: `serializer = IngredientSerializer(ingredients, many=True)`,
+  - we expect it to return *HTTP_200_OK* code, so we do `self.assertEqual(res.status_code, status.HTTP_200_OK)`,
+  - we also expect that the data from our request will match the serialized ingredients, so `self.assertEqual(res.data, serializer.data)`.
+
+- next we will **test that the ingredients are limited to the authenticated user**. For this we'll **create new unit test called test_ingredients_limited_to_user**:
+  - **create new user**, so `user2 = get_user_model()objects.create()` and pass in **new email** and **new password**,
+  - **create new tag** and assign user2 to it: `Ingredient.objects.create(user=user2, name='Vinegar')` and then **create another tag** and assign our user from *setUp* to it: `ingredient = Ingredient.objects.create(user=self.user, name='Tumeric')`. The reason we're not assigning this to an *ingredient* variable is because we don't actually need to reference it at any point in our test whereas **ingredient** we will reference because we'll check that the name of this ingredient matches the name of the ingredient we've created,
+  - **create HTTP GET request to INGREDIENTS_URL**: `res = self.client.get(INGREDIENTS_URL)`,
+  - we expect it to return *HTTP_200_OK* code, so we do `self.assertEqual(res.status_code, status.HTTP_200_OK)`,
+  - we also want the data of our request to include only one element, because we only assigned one ingredient to the currently authenticated client, so we type `self.assertEqual(len(res.data), 1)`,
+  - as we expect our request's data to include one element we also expect this element's name to be exactly the same as the **ingredient**'s name, so `self.assertEqual(res.data[0]['name'], ingredient.name)`.
+
+6. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Implement feature for listing ingredients
+
+Next we're going to add the feature to list ingredients from our ingredients endpoint.
+
+1. Head over to the **serializer.py** file:
+
+- **import Ingredient** model that we created previously,
+
+- **create IngredientSerializer**:
+
+- inside *IngredientSerializer* **create Meta class** and inside:
+  - **set model to Ingredient's model**: `model = Ingredient`,
+  - **set fields to name and id**: `fields = ('name', 'id')`,
+  - **set read-only fields to id**: `read_only_fields = ('id', )`.
+
+2. Head over to the **views.py** file:
+
+- import **Ingredient** from *core.models*,
+
+- **create an ingredient's ViewSet called IngredientViewSet** based on **GenericViewSet**:
+  - add `authentication_classes = (TokenAuthentication, )`,
+  - add `permission_classes = (IsAuthenticated, )`,
+  - add `queryset = Ingredient.objects.all()`,
+  - add `serializer_class = serializers.IngredientSerializer`
+  - add the **get_queryset** function so that we can filter by the objects assigned to the user that is currently authenticated and also order them by name so inside let's type `return self.queryset.filter(user=self.request.user).order_by('-name')`.
+
+3. Head over to **urls.py** and **register Ingredients endpoint** to our default router by typing: `router.register('ingredients', views.IngredientViewSet)`.
+
+4. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Test creating ingredients
+
+1. Head over to **test_ingredients_api.py** and to **PrivateIngredientsApiTests**.
+
+2. **Create new unit test called test_create_ingredient_successful** to test test if creation of ingredients was successful:
+
+- **create payload** which includes **name**,
+
+- **create HTTP POST request** to post in the **payload** to the **INGREDIENTS_URL** which will create new ingredient object; we also don't assign it to any variable because we don't really need it in our function,
+
+- now we'll check if the ingredient object exists in our database: `exists = Ingredient.objects.filter(user=self.user, name=payload['name']).exists()`,
+
+- we expect that our **exists** variable returns *True*, so `self.assertTrue(exists)`.
+
+3. **Add the test to check passing in blank payload** so define new unit test called **test_create_ingredient_invalid**:
+
+- **create payload** which includes **name** but as its value we'll leave it blank string,
+
+- **create HTTP POST request to INGREDIENTS_URL** and pass in **payload**,
+
+- we expect it to return an *HTTP_400_BAD_REQUEST* so `self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)`.
+
+4. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Implement feature for creating ingredients
+
+1. Open up **views.py** and we'll do small changes to our **IngredientViewSet**.
+
+2. Firstly, in addition to *GenericViewSet* let's base that ViewSet on **ListModelMixin** and on **CreateModelMixin**,
+
+3. **Add perform_create** function which will overwrite the default create function with our custom user's request data which is passed in to the database using *serializer.save()* method.
+
+4. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command. Then, go to the browser and test our new *create enpoint*.
