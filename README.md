@@ -1831,3 +1831,79 @@ Next we're going to add the feature to list ingredients from our ingredients end
 3. **Add perform_create** function which will overwrite the default create function with our custom user's request data which is passed in to the database using *serializer.save()* method.
 
 4. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command. Then, go to the browser and test our new *create enpoint*.
+
+#### Re-factor tags and ingredients viewsets
+
+The reason we re-factor our viewsets is we can make **views.py** much shorter and simpler.
+
+What we can notice is that the **TagViewSet** and **IngredientViewSet** are pretty much the same: both have *authentication_classes*, and *permission_classes*, both inherit from *CreateModelMixin* and *ListModelMixin* and also both use *get_queryset* and *perform_create* functions.
+
+1. With all that we can simply create **base class** which we can call **BaseRecipeAttrViewSet** and inside let's put all that things that *TagViewSet* and *IngredientViewSet* have in common. Let's also base that class on classes that *TagViewSet* and *IngredientViewSet* inherit.
+
+The final **BaseRecipeAttrViewSet** class should looks like this:
+
+``` Python
+class BaseRecipeAttrViewSet(viewsets.GenericViewSet,
+                            mixins.ListModelMixin,
+                            mixins.CreateModelMixin):
+    """Base ViewSet for user owned recipe attributes."""
+
+    authentication_classes = (TokenAuthentication, )
+    permission_classes = (IsAuthenticated, )
+
+    def get_queryset(self):
+        """Returns objects for the current authenticated user only."""
+        return self.queryset.filter(user=self.request.user).order_by('-name')
+
+    def perform_create(self, serializer):
+        """Create a new object."""
+        serializer.save(user=self.request.user)
+
+```
+
+2. Next we naturally update *TagViewSet* and *IngredientViewSet*, so:
+
+- base both viewsets on our new **BaseRecipeAttrViewSet**,
+
+- delete all unnecessary code from *TagViewSet* and *IngredientViewSet* as in result **views.py** should contain:
+
+``` Python
+from rest_framework import viewsets, mixins
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import IsAuthenticated
+
+from core.models import Tag, Ingredient
+
+from recipe import serializers
+
+
+class BaseRecipeAttrViewSet(viewsets.GenericViewSet,
+                            mixins.ListModelMixin,
+                            mixins.CreateModelMixin):
+    """Base ViewSet for user owned recipe attributes."""
+
+    authentication_classes = (TokenAuthentication, )
+    permission_classes = (IsAuthenticated, )
+
+    def get_queryset(self):
+        """Returns objects for the current authenticated user only."""
+        return self.queryset.filter(user=self.request.user).order_by('-name')
+
+    def perform_create(self, serializer):
+        """Create a new object."""
+        serializer.save(user=self.request.user)
+
+
+class TagViewSet(BaseRecipeAttrViewSet):
+    """Manage tags in a database."""
+
+    queryset = Tag.objects.all()
+    serializer_class = serializers.TagSerializer
+
+
+class IngredientViewSet(BaseRecipeAttrViewSet):
+    """Manage ingredients in the database."""
+
+    queryset = Ingredient.objects.all()
+    serializer_class = serializers.IngredientSerializer
+```
