@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from core.models import Tag, Ingredient
+from core.models import Tag, Ingredient, Recipe
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -22,3 +22,42 @@ class IngredientSerializer(serializers.ModelSerializer):
         model = Ingredient
         fields = ('id', 'name')
         read_only_fields = ('id', )
+
+
+class UserFilteredPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    """PrimaryKeyRelatedField which filters items by user."""
+
+    def get_queryset(self):
+        """Limit queryset to authenticated users items."""
+        request = self.context.get('request')
+        queryset = super().get_queryset()
+
+        return queryset.filter(user=request.user)
+
+
+class RecipeSerializer(serializers.ModelSerializer):
+    """Serialize Recipe."""
+
+    ingredients = UserFilteredPrimaryKeyRelatedField(
+        many=True,
+        queryset=Ingredient.objects.all()
+    )
+    tags = UserFilteredPrimaryKeyRelatedField(
+        many=True,
+        queryset=Tag.objects.all()
+    )
+
+    class Meta:
+        """Meta class for RecipeSerializer."""
+
+        model = Recipe
+        fields = ('id', 'title', 'ingredients', 'tags', 'time_minutes',
+                  'price', 'link')
+        read_only_fields = ('id', )
+
+
+class RecipeDetailSerializer(RecipeSerializer):
+    """Serialize a recipe detail."""
+
+    ingredients = IngredientSerializer(many=True, read_only=True)
+    tags = TagSerializer(many=True, read_only=True)
