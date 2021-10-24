@@ -1830,7 +1830,7 @@ Next we're going to add the feature to list ingredients from our ingredients end
 
 3. **Add perform_create** function which will overwrite the default create function with our custom user's request data which is passed in to the database using *serializer.save()* method.
 
-4. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command. Then, go to the browser and test our new *create enpoint*.
+4. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command. Then, go to the browser and test our new *create ingredients enpoint*.
 
 #### Re-factor tags and ingredients viewsets
 
@@ -1907,3 +1907,380 @@ class IngredientViewSet(BaseRecipeAttrViewSet):
     queryset = Ingredient.objects.all()
     serializer_class = serializers.IngredientSerializer
 ```
+
+## Create recipe endpoint
+
+In this section we're going to be **creating our recipe endpoint**. We're going to start by creating a new model in our database for handling recipe objects. Once we create the model we're then going to run the migrations and create the migration file that will create the recipe table in the database.
+
+#### Add tests for creating recipe model
+
+1. **Create the test** in *core/tests/test_models.py*, and scroll down to the bottom.
+
+2. **Add new test to test retrieving string representation of a created object**. Let's call this unit test **test_recipe_str**.
+
+3. Inside **test_recipe_str** create a **recipe** and pass in *user=sample_user()*, *title* as a sample title, *time_minutes* and set it to integer and *price* and set it to the decimal field.
+
+4. Then let's **make an assertion**, so we expect that while converting recipe to string we'll receive a recipe's title, so let's type `self.assertEqual(str(recipe), recipe.title)`.
+
+>Note: *the __user__, __title__, __time_minutes__ and __price__ are the only required fields for each recipe object*.
+
+5. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add recipe model
+
+1. **Head over to the models.py** and scroll to the bottom of the file.
+
+2. **Create class called Recipe** which will inherit from the *models.Model* and then let's assign the fields that we want to give:
+
+- **user**, so type: `user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)`,
+
+- **title**: `title = models.CharField(max_length=255)`,
+
+- **time in minutes**: `time_minutes = models.IntegerField()`,
+
+- **price in decimals**: `price = models.DecimalField(max_digits=5, decimal_places=2)`,
+
+- **link** in case the user wanted to add a link to the recipe: `link = models.CharField(max_length=255, blank=True)` and we set it to be blank, so this field will be optional.
+
+The next two fields are going to be the **ingredients** and the **tags**. These are going to be **ManyToManyFields**, so there are different types of foreign key that we can have in a database:
+
+- **OneToOne** relationship which means we would have *one recipe to one ingredient*,
+
+- **OneToMany** relationship which means we would have *many ingredients to one recipe*,
+
+- **ManyToMany** field allows *many recipes to be assigned to many different ingredients*.
+
+Knowing that, let's add two more fields, which are:
+
+- **ingredients** : `ingredients = models.ManyToManyField('Ingredient')`,
+
+- **tags**: `tags = models.ManyToManyField('Tag')`.
+
+>Note: *Django has this useful feature where we can just provide the name of the class in a string and then it doesn't matter which order we place  our models in*.
+
+3. After creating fields inside **Recipe** class, let's create a function to make our *string representation*, so let's create a **\__str__** function and inside let's type `return self.title`.
+
+4. Save this file and **make migrations** using `docker-compose run --rm app sh -c "python manage.py makemigrations core"` or if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py makemigrations core"`.
+
+5. Now let's **register Recipe model** by heading over to *admin.py* and below other models' registration, type: `admin.site.register(models.Recipe)`.
+
+6. Then let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add tests for listing recipes
+
+1. Start by creating a new test module underneath *recipe/tests*. Let's call the module **test_recipe_api.py**.
+
+2. Inside **test_recipe_api.py** let's do some imports:
+
+- **get_user_model** from *django.contrib.auth*,
+
+- **TestCase** from *django.test*,
+
+- **reverse** from *django.urls*,
+
+- **status** from *rest_framework*,
+
+- **APIClient** from *rest_framework.test*,
+
+- **Recipe** from *core.models*,
+
+- **RecipeSerializer** from *recipe.serializers*.
+
+3. Create URL for our recipe endpoint: `RECIPES_URL = reverse('recipe:recipes-list')`.
+
+4. Next we're going to create a helper function called **sample_recipe**. This is going to allow us to easily create test sample recipes for us for later tests We create this helper function because we know that we're going to create a lot of sample recipes. To create a sample recipe we only have to pass in a *user* and if we want, some additional *parameters*, because this function will create a default *parameters*:
+
+- as the parameters for this function let's pass **user** and __**params__,
+
+- inside **sample_recipe** create a dictionary called *defaults* and put a sample *title*, *time_minutes* and *price* inside.
+
+- next we want it to accept additional *parameters* and for this we'll use **update** function on our **defaults** dictionary and pass in **params**, like so: `defaults.update(params)`
+
+>Note: *update function accepts a dictionary object and it will take whichever keys are in the dictionary and it will update them or if they don't exist it will create them*.
+
+- finally, let's create our sample recipe by typing `return Recipe.objects.create(user=user, **defaults)`.
+
+5. We're going to create three different tests:
+
+- to test that authentication is required:
+  - first, let's create a class called **PublicRecipeApiTests** which will inherit from **TestCase**,
+  - inside **PublicRecipeApiTests** create a new **setUp** function which will set up our client to an *APIClient*: `self.client = APIClient()`,
+  - then, let's create **test_auth_required**,
+  - inside, **create HTTP GET request to RECIPES_URL**,
+  - finally, **add assertions**, so as we expect it to return a *HTTP_401_UNAUTHORIZED* let's type `self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)`.
+
+- to test that we can retrieve recipes:
+  - create class called **PrivateRecipeApiTests** which will inherit from **TestCase**,
+  - inside **PrivateRecipeApiTests** create a **setUp** function which also will assign a *APIClient* to our client. We do that by typing `self.client = APIClient()`, then create a user and give him sample credentials, so let's type `self.user = get_user_model().objects.create_user()` and pass in login credentials. When it's done let's *force_authenticate* on our client with created user: `self.client.force_authenticate(self.client)`,
+  - then, let's create **test_retrieve_recipes**,
+  - inside **test_retrieve_recipes create two recipes** using our *sample_recipe* function by repeating `sample_recipe(user=self.user)` twice. We don't assign any variable to this because we don't need to access them in our test,
+  - **create HTTP GET request to RECIPES_URL**: `res = self.client.get(RECIPES_URL)`,
+  - now, let's **retrieve recipes from database** by typing `recipes = Recipe.objects.all().order_by('-id')`,
+  - then, let's **put retrieved recipes into our serializer** and make it accept many fields, so type: `serializer = RecipeSerializer(recipes, many=True)`,
+  - with all that we can **make assertions** and firstly, we expect it to return *HTTP_200_OK* so type `self.assertEqual(res.status_code, status.HTTP_200_OK)`,
+  - then we expect that the data from our GET request will be the same as the data we passed in to the serializer, so `self.assertEqual(res.data, serializer.data)`.
+
+- to test that the recipes are limited to the authenticated user:
+  - inside **PrivateRecipeApiTests** create **test_recipes_limited_to_user**
+  - **create a new user called user2** using *get_user_model()* function and pass in sample authentication credentials,
+  - next, create two sample recipes - one for **user** and second for **user2**: `sample_recipe(user=self.user)` and `sample_recipe(user=user2)`,
+  - **create HTTP GET request to RECIPES_URL**: `res = self.client.get(RECIPES_URL)`,
+  - **retrieve all recipe objects from database** and order this by *'-id'*: `recipes = Recipe.objects.all().order_by('-id')`,
+  - now let's **serialize retrieved recipe objects** and set it to receive many fields: `serializer = RecipeSerializer(recipes, many=True)`,
+  - with all that let's **make an assertions** and first of all we expect it to return *HTTP_200_OK*, so type `self.assertEqual(res.status_code, status.HTTP_200_OK)`,
+  - we also expect that our request's data will contain only one element, so let's make `self.assertEqual(len(res.data), 1)`,
+  - finally, we we expect that the data from our GET request will be the same as the data we passed in to the serializer, so `self.assertEqual(res.data, serializer.data)`.
+
+6. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Implement feature for listing recipes
+
+1. Head over to **serializer.py**:
+
+- **import _Recipe_ model**,
+
+- **create new class called RecipeSerializer**.
+
+The fields that we're going to add are going to be the **id**, **title**, **ingredients**, **tags**, **time_minutes**, **price** and **link**.
+
+- **Create Meta class** inside **RecipeSerializer**:
+  - **point our model serializer to the correct model** so type `model = Recipe`,
+  - **specify the fields** that we want to return in our serializer: `fields = ('id', 'title', 'ingredients', 'tags', 'time_minutes', 'price', 'link')`,
+  - **add the read-only fields** so `read_only_fields = ('id', )`.
+
+  >Note: *the reason we do this is just to prevent the user from updating the ID when they may create or edit requests. We prevent updating the ID because it's best practice as we don't want to have the primary key changing unless we have a really good reason to change it*.
+
+- now, because we want to filter our *ingredients* and *tags* only to the authenticated user we have to create **new class before RecipeSerializer called UserFilteredPrimaryKeyRelatedField** so we can use it to get access to the *ingredient* and *tag* querysets:
+
+``` Python
+class UserFilteredPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    """PrimaryKeyRelatedField which filters items by user."""
+
+    def get_queryset(self):
+        """Limit queryset to authenticated users items."""
+        request = self.context.get('request')
+        queryset = super().get_queryset()
+
+        return queryset.filter(user=request.user)
+```
+
+- next what we need to do is we need to **define the primary key related fields** within our fields. Now because the **ingredients** and the **tags** are not actually part of the sterializer, because they're references to the *ingredient* and *tag* models we need to define these as special fields. We'll add two class variables to the top of our recipe sterilizer (before *Meta* class):
+  - `ingredients = UserFilteredPrimaryKeyRelatedField(many=True, queryset=Ingredient.objects.all())`,
+  - `tags = UserFilteredPrimaryKeyRelatedField(many=True, queryset=Tag.objects.all())`.
+
+These two fields create a **UserFilteredPrimaryKeyRelatedField** and all this does it says *"allow many and list the objects from the given queryset"*, so the object with its *id* and *primary key id*. This is how we want it to appear when we're listing our recipes because we don't want it to include the full list of its content. We just wanted to list the *id*\s and then if we want to retrieve the full name of the ingredients we can use the *detail API*.
+
+2. Head over to **views.py** and inside, let's create **RecipeViewSet** and base it on *viewsets.ModelViewSet*:
+
+- **add serializer_class**: `serializer_class = serializers.RecipeSerializer`,
+
+- **add queryset for Recipe**: `queryset = Recipe.objects.all()`,
+
+- **add authentication_classes**: `authentication_classes = (TokenAuthentication, )`,
+
+- **add permission_classes**: `permission_classes = (IsAuthenticated, )`.
+
+- **add _get_queryset_ function** to limit the objects to the authenticated user: `return self.queryset.filter(user=self.request.user)`.
+
+3. Head over to **urls.py** and **register new route** to our default router: `router.register('recipes', views.RecipeViewSet)`.
+
+4. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add tests for retrieving recipe details
+
+The recipe detail is going to allow us to retrieve a specific recipe returning more details than what the list recipes endpoint returns. The list recipe endpoint is more like a summary of all the recipes that we have and the detailed recipe endpoint is going to be for a specific recipe. The main difference in our app is that the list recipe endpoint is only going to return the ids of the tags and ingredients that are assigned to that recipe whereas the detail view will return the actual name and the id of each tag and ingredient that is assigned.
+
+1. Head over to **test_recipe_api.py** and import **Ingredient**, **Tag** models and **RecipeDetailSerializer**.
+
+2. Above **sample_recipe** helper function let's add **sample_tag** function and it's going to take a *user* and a *name* which default value let's set to *"Main course"*. This function will only return **created tag object**: `return Tag.objects.create(user=user, name=name)`.
+
+>Note: *The reason we didn't use __**params__ is because there's only two fields required for the sample tag so we're just going to provide those fields and we're going to provide the username anyway and then we'll just provide the name as a default argument. So if we wanted to override the name then we have that option*.
+
+3. Now let's do the same for **ingredients**, so let's create a new helper function called **sample_ingredient**, pass in *user* and *name* as a parameters and set default value for *name* to e.g. *"Cinnamon"*. Then simply **return a sample ingredient object**: `return Ingredient.objects.create(user=user, name=name)`.
+
+4. Next we'll create a new **helper function for creating the URL**. So unlike the *RECIPES_URL* we're going to require an argument in our URL, which is the **ID of the recipe** we want to retrieve the detail for. So the *RECIPES_URL* may look something like */api/recipe/recipes/* to access the *recipe app* and *recipes endpoint* while the **detail** may look something like */api/recipe/recipes/1/* so with **recipe's id**. So we're going to need to pass in this argument whenever we create the **recipe detail URL**. We can't just assign it to a standard variable. What we need to do is create a function called **detail_url** with *recipe_id* parameter. This function will only return a **reverse to recipe-detail page** and as a second parameter we'll pass a *recipe_id* as a **args**:
+
+`return reverse('recipe:recipe-detail', args=[recipe_id])` - the first argument is the name of the endpoint that the default router will create for our ViewSet, because we're going to have a **detail** action. The second argument is how we specify arguments with the *reverse* function, we just pass in **args** and then we pass in a list of the arguments we want to add. The reason it's a list is because we may have multiple arguments for a single URL.
+
+5. Now we can add our tests, so scroll down to the **PrivateRecipeApiTests** and add new unit test called **test_view_recipe_detail**:
+
+- **create a sample recipe** using our *sample_recipe* helper function: `recipe = sample_recipe(user=self.user)`,
+
+- **assign a sample tag to this recipe**: `recipe.tags.add(sample_tag(user=self.user))`,
+
+- **assign a sample ingredient to this recipe**: `recipe.ingredients.add(sample_ingredient(user=self.user))`,
+
+- **create sample url** passing in a *recipe's id*: `url = detail_url(recipe.id)`,
+
+- **create a HTTP GET request to our sample url**: `res = self.client.get(url)`,
+
+- **pass our sample recipe to our serializer**: `serializer = RecipeDetailSerializer(recipe)`,
+
+- finally we expect that the HTTP GET request's data will be the same as the data we pass in to the serializer, so let's **make an assertion**: `self.assertEqual(res.data, serializer.data)`.
+
+6. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Implement feature for retrieving recipe details
+
+Next we're going to implement our **feature for retrieving the recipe detail**. We're going to start by **adding a RecipeDetailSerializer** and then we're going to **modify our ViewSet** to return this serializer when accessing the detail action in the ViewSet.
+
+1. **Open up the serializers.py** file and we're going to make a modification of **RecipeSerializer** and we're going to change some of the fields that it returns.
+
+>Note: *the difference between our __list-__ and our __detail-view__ would be that the __detail__ one would specify the actual __ingredients__ and the __tag__ objects that are assigned to that recipe. Whereas __RecipeSerializer__ is using the PrimaryKey related field so it's only going to return the primary key or the ID of the ingredient and the tags associated to that recipe*.
+
+2. Below **RecipeSerializer** create new class called **RecipeDetailSerializer** and base it on **RecipeSerializer**. With Django REST framework we can **nest serializers** inside each other which means that we can type `ingredients = IngredientSerializer(many=True, read_only=True)` and with this `ingredients` variable we create the *related key object* that renders or returns the ingredients objects which we can then pass into our **IngredientSerializer** and convert it to this type of object. We **override _ingredients_ and _tags_ fields** because we want them to include all its fields, not only IDs.
+
+3. Run tests and there should be only one error left and this is because we're not actually using **RecipeDetailSerializer** yet, we still need to implement this in our *views.py*.
+
+4. **Head over to views.py** and override our **RecipeViewSet**'s *get_serializer_class*. This is a function that's called to retrieve the serializer class for a particular request.
+
+We have a number of actions available by default in the **model ViewSet** e.g.:
+
+- **list** which returns list of objects and in our case we want it to be default,
+
+- **retrieve** in which case we want to return the detail sterilizer so when we call the **retrieve** action it serializes it using specified serializer instead of the default one.
+
+So inside **RecipeViewSet** create new function called **get_serializer_class** and specify on what request's action we want to return our **RecipeDetailSerializer** then return this serializer:
+
+``` Python
+def get_serializer_class(self):
+      """Return appropriate serializer class."""
+      if self.action == 'retrieve':
+        return serializers.RecipeDetailSerializer
+```
+
+5. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add tests for creating recipes
+
+We're going to create three tests:
+
+- **test creating a basic recipe**,
+
+- **tests creating a recipe with tags assigned**,
+
+- **test creating a recipe with ingredients assigned**.
+
+1. Head over to *test_recipe_api.py* and we're going to add all these tests to **PrivateRecipeApiTests**.
+
+2. **Create test_create_basic_recipe** unit test:
+
+- **create payload for our recipe** with sample *title*, sample *time_minutes* and sample *price* and these are the basic minimum fields required for creating a new recipe,
+
+- **create HTTP POST request** to RECIPES_URL with *payload* passed in,
+
+- now we expect it to return *HTTP_200_OK* code so let's type `self.assertEqual(res.status_code, status.HTTP_200_OK)`,
+
+- now let's **retrieve created recipe** from database: `recipe = Recipe.objects.get(id=res.data['id'])`,
+
+- with retrieved recipe we want to make sure that the data in our recipe is exactly the same as the data we passed in with *payload*, but while creating a *recipe* object the Django REST framework will return a dictionary so therefore to get access to the *recipe* object's values we have to use **dictionary keys** to iterate through both, *payload*'s and *recipe*'s elements and then use **getattr** function to get the *key value from recipe*:
+
+``` Python
+for key in payload.keys():
+        self.assertEqual(payload[key], getattr(recipe, key))
+```
+
+3. **Create test_create_recipe_with_tags** unit test:
+
+- **create two sample tags** assigned to the same *user*, so repeat this line twice: `tag1 = Tag.objects.create(user=self.user, name='<SAMPLE NAME>')`,
+
+- **create payload for our recipe** which will contain sample *title*, our *tags*' IDs (use `tag1.id`), sample *time_minutes* and sample *price*,
+
+- **create HTTP POST request for RECIPES_URL** and pass in payload to create this recipe in database,
+
+- now we expect it to pass with *HTTP_200_OK* so `self.assertEqual(res.status_code, status.HTTP_200_OK)`,
+
+- next, **get recipe object** from database: `recipe = Recipe.objects.get(id=res.data['id'])`,
+
+- now, **get all tags from this recipe**: `tags = recipe.tags.all()`,
+
+- with this **tags** variable we can **make some assertions**:
+  - first, let's **check that the number of returned tags is exactly the same as the number of tags that we created**: `self.assertEqual(tags.count(), 2)`,
+  - **check if the *tag1* is in the *tags*: `self.assertIn(tag1, tags)`,
+  - **check if the *tag2* is in the *tags*: `self.assertIn(tag2, tags)`.
+
+4. **Create test_creating_recipe_with_ingredients** unit test (just like with *tags*):
+
+- **create two sample ingredients** assigned to the same *user*, so repeat this line twice: `ingredient1 = Ingredient.objects.create(user=self.user, name='<SAMPLE NAME>')`,
+
+- **create payload for our ingredient** which will contain sample *title*, our *ingredients*' IDs (use `ingredient1.id`), sample *time_minutes* and sample *price*,
+
+- **create HTTP POST request for RECIPES_URL** and pass in payload to create this recipe in database,
+
+- now we expect it to pass with *HTTP_200_OK* so `self.assertEqual(res.status_code, status.HTTP_200_OK)`,
+
+- next, **get recipe object** from database: `recipe = Recipe.objects.get(id=res.data['id'])`,
+
+- now, **get all tags from this recipe**: `ingredients = recipe.ingredients.all()`,
+
+- with this **ingredients** variable we can **make some assertions**:
+  - first, let's **check that the number of returned ingredients is exactly the same as the number of ingredients that we created**: `self.assertEqual(ingredients.count(), 2)`,
+  - **check if the *ingredient1* is in the *ingredients*: `self.assertIn(ingredient1, ingredients)`,
+  - **check if the *ingredient2* is in the *ingredients*: `self.assertIn(ingredient2, ingredients)`.
+
+5. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Implement feature for creating recipes
+
+The only thing that we need to change in our ViewSet to **enable creating recipes** is we need to add a *perform_create* function that assigns the user of the recipe to the current **authenticated user**.
+
+1. **Open up our _views.py_** and locate our **RecipeViewSet**.
+
+2. **Add a new function called perform_create** which is going to accept the *serializer* as argument.
+
+3. Now, in order to create a recipe object for a **authenticated user** we'll use *save()* function for serializer object: `serializer.save(user=self.request.user)`.
+
+4. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command. Then, go to the browser and test our new *create recipe enpoint*.
+
+#### Add tests for updating recipes
+
+Next we're going to add some tests for updating our recipes. Since the update feature comes with the Django REST framework out the box for the *ModelViewSet* we technically don't need to create these tests because we're testing functionality that is already there.
+
+We're going to add two tests to the bottom of **test_recipe_api.py**:
+
+- **test a partial update** of an object using **HTTP PATCH** method,
+
+- **test a full update** of an object using **HTTP PUT** method.
+
+1. **Create new unit test called test_partial_update_recipe**:
+
+- **create sample recipe using sample_recipe function** and pass in a *user*: `recipe = sample_recipe(user=self.user)`,
+
+- **add sample tag to this _recipe_ object using sample_tag** and pass in a *user*: `recipe.tags.add(sample_tag(user=self.user))`,
+
+- **create new tag** because in order to partly update our *payload* with additional fields we have to replace already assigned tag to the recipe with this new tag: `new_tag = sample_tag(use=self.user, name='<SAMPLE NAME>')` and we type here a *name* to override the *name* which was set by default in **sample_tag** function,
+
+- **create payload** to create recipe with given fields - sample *title* and *new_tag*'s ID: `payload = {'title': '<SAMPLE TITLE>', 'tags': [new_tag.id]}`,
+
+- **create detail_url** and pass in a `recipe.id`,
+
+- **create HTTP PATCH request to this url** but we don't have to assign this request to any variable,
+
+- now, after we did *PATCH* request we partly updated our **sample tag** with **new_tag**, but our recipe still holds this **sample tag** so we have to make get refreshed data from database `recipe.refresh_from_db()`,
+
+- with all that we can **make an assertions**:
+  - so we expect the recipe's title to be exactly the same as the title we passed in with the payload, so let's type: `self.assertEqual(recipe.title, payload['title'])`,
+  - **get all tags from our recipe**: `tags = recipe.tags.all()` and **check that there is only one tag assigned to the recipe**: `self.assertEqual(len(tags), 1)`,
+  - **check that new_tag is in tags**: `self,assertIn(new_tag, tags)`.
+
+2. **Create new unit test called test_full_update_recipe**:
+
+- **create sample recipe** using **sample_recipe** helper function and pass in a *user*: `recipe = sample_recipe(user=self.user)`,
+
+- **add sample tag to this recipe** using **sample_tag** helper function: `recipe.tags.add(sample_tag(user=self.user))`,
+
+- so in order to test full update we'll use *HTTP PUT* request to update **sample tag** with the object created using **HTTP PUT** request to the **detail_url** and with **payload** passed in. So let's first **create a payload** and pass in a sample *title*, sample *time_minutes* and sample *price*: `payload = {'title': 'SAMPLE TITLE', 'time_minutes': SMPL_TIME_int, 'price': SMPL_PRICE_dec}`,
+
+- then, **create detail URL** for our recipe using *detail_url*: `url = detail_url(recipe.id)`,
+
+- **create HTTP PUT request to the detail page** and pass in a payload. We also don't need to assign this request to any variable,
+
+- after updating **sample tag** with our *HTTP PUT* request we have to update the **recipe** variable with new tag object from our database: `recipe.refresh_from_db()`,
+
+- with all this let's **make an assertions**:
+  - **check it the recipe's title is exactly the same as the title from the payload**: `self.assertEqual(recipe.title, payload['title'])`,
+  - **check if the recipe's time_minutes is exactly the same as the payload's**: `self.assertEqual(recipe.time_minutes, payload['time_minutes'])`,
+  - **check if the recipe's price is exactly the same as the payload's**: `self.assertEqual(recipe.price, payload['price'])`,
+  - **get all recipe's tags**: `tags = recipe.tags.all()` and **check that there is only one element in it**: `self.assertEqual(len(tags), 1)`.
+
+3. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
