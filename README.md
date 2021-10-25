@@ -2284,3 +2284,200 @@ We're going to add two tests to the bottom of **test_recipe_api.py**:
   - **get all recipe's tags**: `tags = recipe.tags.all()` and **check that there is only one element in it**: `self.assertEqual(len(tags), 1)`.
 
 3. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+## Add upload image endpoint
+
+#### Add Pillow requirement
+
+Before adding a **ImageField** to our **recipe** model we need to install the **pillow** Python package which is used for manipulating images which are uploaded in Python.
+
+1. Start by making some changes to the **requirements.txt** file. Add a new dependency underneath *psycopg2*: `Pillow>=5.3.0<5.4.0`.
+
+2. Next we'll make some modifications to our **Dockerfile**. So **Pillow** requires some Linux packages to be installed before we can successfully compile and install it using the *PIP package manager*:
+
+- first, we'll update this line `RUN apk add --update --no-cache postgresql-client` to this `RUN apk add --update --no-cache postgresql-client jpeg-dev`, so we add the JPEG dev dependency to our permanent dependencies of our *Dockerfile*,
+
+- next, we update this line `RUN apk add --update --no-cache --virtual .tmp-build-deps gcc libc-dev linux-headers postgresql-dev musl-dev` with this `RUN apk add --update --no-cache --virtual .tmp-build-deps \ gcc libc-dev linux-headers postgresql-dev musl-dev zlib zlib-dev` so we add some temporary build dependencies that are required for installing the *Pillow* package.
+
+3. Next we're going to make some **changes to the file structure** in our Docker container so we have a place where we can store the **static** and **media** files within our container without getting any permission errors, so inside **Dockerfile**, at the bottom of the file, above *adduser*:
+
+- create two new directories:
+  - `RUN mkdir -p /vol/web/media`,
+  - `RUN mkdir -p /vol/web/static`.
+  >Note: *we use __-p__ to create */vol/web* directories automatically*.
+
+- then we leave line for creating user: `RUN adduser -D user`,
+
+- next, add `RUN chown -R user:user /vol/` and it sets the ownership of all the directories (*-R* - recursively) within the volume directory to our custom user,
+
+- finally add `RUN chmod -R 755 /vol/web` so the user can do everything with the directory and the rest can read and execute from the directory.
+
+4. Save that file and open up *settings.py*, scroll down to the bottom and add:
+
+- `MEDIA_URL = '/media/'`, so when we upload media files we have an accessible URL so that we can access them through our web server,
+
+- `MEDIA_ROOT = '/vol/web/media'` and it simply tells Django where to store all the media files,
+
+- `STATIC_ROOT = 'vol/web/static'` like with *MEDIA_ROOT*.
+
+5. Next, we'll make some changes to the **core's urls.py** file and what we need to do is add a reference or a URL for our media files.
+
+>Note: *by default the Django development server will serve static files for any dependencies in our project however it doesn't serve media files by default we need to manually add this in the URLs*.
+
+- Add two more imports:
+  - **settings** from *django.conf*,
+  - **static** from *django.conf.urls.static*.
+
+Then, after the *urlpatterns* add `+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)`. It makes the media URL available in our development server so we can test uploading images for our recipes without having to set up a separate web server for serving these media files.
+
+6. Open up terminal, navigate to the project's folder and type `docker-compose build` of if it doesn't work type `sudo docker-compose build`.
+
+#### Modify recipe model
+
+Next we're going to modify our recipe model to accept an **ImageField**. We're going to start by adding the function that generates the name which we're going to call in the **ImageField** on the system after the image has been uploaded.
+
+>Note: *whenever we upload a file to a Django model we need to make sure we change the name and we don't just use the same name that was uploaded. This is to make sure all the names are consistent and also to make sure that there are no conflicts with the name that we upload*.
+
+We're going to generate a function which will create the path to the image on our system and we're going to use a **uuid** to uniquely identify the image that we assign to the **ImageField**.
+
+1. We're going to start by adding some unit tests, so head over to the **core's test_models.py** file.
+
+2. Import **patch** from *unittest.mock*.
+
+3. Scroll down to the bottom and create new unit test called **test_recipe_file_name_uuid**, pass in **mock_uuid** as parameter and we're going to **mock the uuid function** from the default uuid library that comes with Python. We're going to **change the value that it returns** and then we're going to **call our function** and we're going to make sure that the string that is created for the path matches what we expect it to match with the sample UUID:
+
+- add **patch decorator** before function definition so we type `@patch()` and pass in the path of the function that we're going to mock, which is *uuid.uuid4*,
+
+- add the **mock uuid** to the parameters of our test: `uuid = 'test-uuid'` so with this we change the value of this uuid to pretty much sample text which is *test-uuid*,
+
+- then we're going to mock the return value by doing `mock_uuid.return_value = uuid` which means that anytime we call this **uuid** for function that is triggered from within our test it will change the value override the default behavior and just return this *test-uuid* string that we set earlier,
+
+- next we're going to call the function that we'll create after we've done the test and the function will return a *filepath*: `file_path = models.recipe_image_file_path(None, 'myimage.jpg')` and it accepts two parameters: one is the *instance* and we don't need to provide that here so we set it to *None* and second one is the file name of the original file,
+
+- finally, we have to add what we expect this function to return, so we expect something like *uploads/recipe/<RAND_GEN_TXT>.jpg* and to do that simply type `exp_path = f'uploads/recipe/{uuid}.jpg'`,
+
+- make an assertion to check if the *file_path* (which was created using function that we're going to write later) id exactly the same as our expected result *exp_path*: `self.assertEqual(file_path, exp_path)`.
+
+4. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+5. Head over to **models.py** and import **uuid** and **os**.
+
+6. Add new helper-function called **recipe_image_file_path** which will accept *instance* and *filename*:
+
+- first, we want to get an extension from passed in *filename*: `ext = filename.split('.')[-1]` so we split whole *filename* by *"."* and we know that the last element in this list should be an extension, so we select it by typing *[-1]*,
+
+- then we build our **filename** by typing `filename = f'{uuid.uuid4}.{ext}'`, so the first part is generated randomly by the *uuid4* function and then we simply add in an extension,
+
+- finally, what we have to do is we simply return whole path by using `os.path.join()` function and passing in a **path** *uploads/recipe/* and the **filename**.
+
+7. With **recipe_image_file_path** we can scroll down and add new field in our **Recipe model**: `images = models.ImageField(null=True, upload_to=recipe_image_file_path)` and we pass in the *null=True*, because this field is optional and *upload_to=recipe_image_file_path* and we don't use brackets because we want this to be a reference to our helper-function.
+
+8. Save this file and **make migrations** using `docker-compose run --rm app sh -c "python manage.py makemigrations core"` or if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py makemigrations core"`. Then, let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add tests for uploading images to recipe
+
+Now, that we have our **ImageField** available on our *Recipe* model, we can go ahead and add the API for uploading images. We're going to start by adding a few tests to test uploading images through our API.
+
+1. Head over to **test_recipe_api.py**.
+
+2. Import:
+
+- **tempfile** which functions we will use to create a temporary file which we'll remove after we've used it,
+
+- **os**,
+
+- **Image** from *PIL* which is pretty much *Pillow* module and this will import our image class which will let us then create test images which we can then upload to our API.
+
+3. Now, let's create a helper-function called **image_upload_url** which will accept *recipe_id* which we're going to need in order to upload an image and what this function does is it returns URL for recipe image. So we simply do `return reverse('recipe:recipe-upload-image', args=[recipe_id])` - we create this endpoint and pass in recipe's ID.
+
+4. Scroll down to the bottom and we're going to add new **test class** because there's going to be some common functionality for the image upload test that we're going to want to repeat, so let's create new class called **RecipeImageUploadTests** and pass in an argument *TestCase*.
+
+5. Then let's create a **setUp** function:
+
+- **assign APIClient** to our client `self.client = APIClient()`,
+
+- **create new user**: `self.user = get_user_model().objects.create_user()` and pass in a sample *email* and *password*,
+
+- **authenticate our user**: self.client.force_authenticate(self.user),
+
+- **create sample recipe**: `self.recipe = sample_recipe(user=self.user)` and the reason we do that is we're going to need the recipe already created in all our tests, so we don't have to create it every single time.
+
+6. Create another helper-function called **tearDown** which is pretty much the opposite function to the **setUp** function - after all tests if clears an environment so deletes all test files, so in our case all images that were created for the testing purpose. After definition simply type `self.recipe.images.delete()`.
+
+7. We're going to add two tests:
+
+- **test uploading an image just as we would**:
+  - test will be called **test_upload_image_to_recipe**,
+  - we create **url** variable and assign a image URL to it using *image_upload_url* function: `url = image_upload_url(self.recipe.id)` which accepts recipe's ID and it uses a **sample recipe** from **setUp**,
+  - next, type:
+  ``` Python
+  with tempfile.NamedTemporaryFile(suffix='.jpg') as ntf:
+          img = Image.new('RGB', (10, 10))
+          img.save(ntf, format='JPEG')
+          ntf.seek(0)
+          res = self.client.post(url, {'images': ntf}, format='multipart')
+  ```
+  It creates a named temporary file on the system at a random location, then, we give it a suffix (in our case it's just an extension of an image). We use a *with* statement and use this **tempfile** as a *nts* (*Named Temporary File*), because, as it's *TEMPORARY FILE* it'll be gone after exiting the **with** statement. We create an *image* object which is `('RGB', (10, 10))` 10x10 black square. We save it as the *tempfile* we've created and with JPEG format. We use `ntf.seek(0)` to set Python to read it every time from the beginning. Then we simply create a **POST** request to the image's URL, as *payload* we pass in the **images** field from our models set to the **ntf**. We also have to pass in a `format='multipart'`, because we want to make a multi-part form request which means a form that consists of data. By default it would just be a form that consists of a JSON object and we actually want to post data.
+  - next, we have to refresh our **recipe**'s data from database: `self.recipe.refresh_from_db()`,
+  - then we check that it returns a *HTTP_200_OK*: `self.assertEqual(res.status_code, status.HTTP_200_OK)`,
+  - we check if the field *'images'* is in the *res.data*: `self.assertIn('images', res.data)`,
+  - finally, we check if the path to the image exists: `self.assertTrue(os.path.exists(self.recipe.images.path))`.
+
+- **test uploading an invalid image** just to make sure that it returns a *HTTP_400_BAD_REQUEST*:
+- test will be called **test_upload_image_bad_request**,
+- we create **url** variable and assign a image URL to it using *image_upload_url* function: `url = image_upload_url(self.recipe.id)` which accepts recipe's ID and it uses a **sample recipe** from **setUp**,
+- **create a POST request** to the created URL and as the *payload* we pass in the *'images'* field set to the sample text, just to see that it's invalid. We also put the *format='multipart'* at the end: `res = self.client.post(url, {'images': 'notimage'}, format='multipart')`,
+- finally we check that the response was *HTTP_400_BAD_REQUEST*: `self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)`.
+
+8. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Add feature to upload image
+
+1. Head over to the **serializers.py** and add new serializer class called **RecipeImageSerializer** and base it on *serializers.ModelSerializer*. Inside let's create a **Meta** class and inside:
+
+- specify model: `model = Recipe`,
+
+- specify fields: `fields = ('id', 'images')`,
+
+- specify read only fields: `read_only_fields = ('id', )`
+
+2. Head over to the **views.py** and import:
+
+- **action** from *rest_framework.decorators*,
+
+- **Response** from *rest_framework.response*,
+
+- **status** from *rest_framework*.
+
+3. Scroll down to the **RecipeSerializer** and i.e. *get_queryset*, *get_serializer_class* or *perform_create* are actions that we overrode, these are all default actions, so if we didn't override them then they will just perform the default action. To add custom function we'll use this **action** decorator and we pass in define the methods that our action is going to accept and the method could be **POST**, **PUT**, **PATCH** or **GET**.
+
+`@action(methods=['POST'], detail=True, url_path='upload-image')`
+
+- `methods=['POST']` - we choose to make the action just **POST**. We're going to allow users to post an image to our recipe,
+
+- `detail=True` - it says this action will be for the detail - **a specific recipe** - so we're going to only be able to upload images for recipes that **already exist**. We'll also use the *detail_url* that has the ID of the recipe in the URL so it knows which one to upload the image to,
+
+- `url_path='upload-image'` - the path name for our URL and that will be the path that is visible within the URL.
+
+4. Now, with this decorator let's define our function called **upload_image** and pass in *request* and *pk=None* as its parameters:
+
+- **retrieve the recipe object**: `recipe = self.get_object()` it will get the default or the object that is being accessed based on the ID in the URL,
+
+- **call the serializer**: `serializer = self.get_serializer()` and pass in *recipe* and *data=request.data*,
+
+- **check if the serializer's data is valid** so we type `if serializer.is_valid():` and inside this *if* statement:
+  - **save serializer**: `serializer.save()` and what that basically does is performs a save on the recipe model with the updated data,
+  - then, let's simply return data from serializer and *HTTP_200_OK* code: `return Response(serializer.data, status=status.HTTP_200_OK)`.
+
+- **if it's not valid** return response `return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)`.
+
+5. Go to **RecipeViewSet** and inside **get_serializer_class** function add another *elif* to the *if* statement:
+
+``` Python
+elif self.action == 'upload_image':
+        return serializers.RecipeImageSerializer
+```
+
+just to handle an action of **uploading an image**. We want the Django REST framework to know which serializer to display in the browsable API.
+
+6. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command. Then, go to the browser and test our new *upload image enpoint*.
