@@ -2481,3 +2481,295 @@ elif self.action == 'upload_image':
 just to handle an action of **uploading an image**. We want the Django REST framework to know which serializer to display in the browsable API.
 
 6. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command. Then, go to the browser and test our new *upload image enpoint*.
+
+## Add filtering
+
+Next we're going to add the ability to **filter recipes by tags or ingredients**. This will make it really easy for users to find recipes if they want to find a recipe that has particular ingredients in it or matches particular tags. We're going to start by **creating unit tests** to test our filtering mechanism and then we're going to go ahead and **implement the filtering feature** to our API.
+
+#### Add tests for filtering recipes
+
+1. Head over to *recipe/tests/test_recipe_api.py* and at the bottom of the test case **add a new test called test_filter_recipes_by_tags** to test returning recipes with specific tags.
+
+2. Start by **creating three recipes** and two of them are going to have tags assigned and one of them is not going to have the tags assigned. Then **make the request** with the filter parameters for the tags and ensure that the results returned match the ones with the tags and exclude the one without the tags:
+
+``` Python
+    recipe1 = sample_recipe(user=self.user, title='Thai vegetable curry')
+    recipe2 = sample_recipe(user=self.user, title='Aubergine with tahini')
+    tag1 = sample_tag(user=self.user, name='Vegan')
+    tag2 = sample_tag(user=self.user, name='Vegetarian')
+    recipe1.tags.add(tag1)
+    recipe2.tags.add(tag2)
+    recipe3 = sample_recipe(user=self.user, title='Fish and chips')
+
+    res = self.client.get(
+        RECIPES_URL,
+        {'tags': f'{tag1.id},{tag2.id}'}
+    )
+```
+
+If we want to filter by tags we simply pass a get parameter with a comma separated list of the tag IDs that we wish to filter by.
+
+3. **Serialize the recipes** and **check if they exist in the returned responses** so we expect the first two recipes to be returned so we'll do *assertNotIn* for the third one:
+
+``` Python
+    serializer1 = RecipeSerializer(recipe1)
+    serializer2 = RecipeSerializer(recipe2)
+    serializer3 = RecipeSerializer(recipe3)
+
+    self.assertIn(serializer1.data, res.data)
+    self.assertIn(serializer2.data, res.data)
+    self.assertNotIn(serializer3.data, res.data)
+```
+
+4. Now we'll do the same for ingredients, so after *test_filter_recipes_by_tags* **create new test called test_filter_recipes_by_ingredients**.
+
+5. Start by **creating three recipes** and two of them are going to have ingredients assigned and one of them is not going to have the ingredients assigned. Then **make the request** with the filter parameters for the ingredients and ensure that the results returned match the ones with the ingredients and exclude the one without the ingredients:
+
+``` Python
+    recipe1 = sample_recipe(user=self.user, title='Posh beans on toast')
+    recipe2 = sample_recipe(user=self.user, title='Chicken cacciatore')
+    ingredient1 = sample_ingredient(user=self.user, name='Feta cheese')
+    ingredient2 = sample_ingredient(user=self.user, name='Chicken')
+    recipe1.ingredients.add(ingredient1)
+    recipe2.ingredients.add(ingredient2)
+    recipe3 = sample_recipe(user=self.user, title='Steak and mushrooms')
+
+    res = self.client.get(
+        RECIPES_URL,
+        {'ingredients': f'{ingredient1.id},{ingredient2.id}'}
+    )
+```
+
+To filter by ingredients we pass in get parameter with comma separated ingredients' IDs.
+
+6. Next, **serialize the recipes** and **check if they exist in the returned responses** so we expect the first two recipes to be returned so we'll do *assertNotIn* for the third one:
+
+``` Python
+    serializer1 = RecipeSerializer(recipe1)
+    serializer2 = RecipeSerializer(recipe2)
+    serializer3 = RecipeSerializer(recipe3)
+
+    self.assertIn(serializer1.data, res.data)
+    self.assertIn(serializer2.data, res.data)
+    self.assertNotIn(serializer3.data, res.data)
+```
+
+7. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Implemented feature for filtering recipes
+
+1. Head over to the *views.py* and add new **import Recipe from core.models**.
+
+2. Now, we'll be modifying the **RecipeViewSet** to apply the filters if they are provided as get parameters. We're going to start by retrieving the comma separated string of ID's for our tags and ingredients and then we're going to convert that comma separated string to a list of actual integers and then we can apply the database query to filter our queryset by these provided tags and ingredients.
+
+3. **Go to the get_queryset** method and start by retrieving the **query_params** for tags and ingredients:
+
+``` Python
+    tags = self.request.query_params.get('tags')
+    ingredients = self.request.query_params.get('ingredients')
+```
+
+The request object has a variable called **query_params** which will be a dictionary containing all of the query parameters that are provided in the request. **query_params** is a dictionary so we can get an object using the **get** function and the item we're going to get is the *tags* and *ingredients*.
+
+>Note: *if we have provided tags as a __query_param__ or a __query_string__ then it will be assigned to tags -  the actual string that we've provided. If not, then by default, the __get__ function returns __None__ so the tag's key doesn't exist in our __query_params__ then this will be set to __None__ so that way we can check if it's been provided or not*.
+
+4. Assign our queryset `queryset = self.queryset`. The reason we do this is because we don't want to be reassigning our queryset with the filtered options. We want to actually reference it by queryset, apply the filters and return that instead of our main queryset.
+
+5. Next, we need to create a function that will convert the IDs to list of integers. Above *get_queryset* method create new "private" function called **_params_to_ints** and pass in the **qs** parameter.
+
+To speed up the whole process of converting list of strings to the list of integers we'll use the *list comprehension* so we simply type `return [int(str_id) for str_id in qs.split(',')]` inside our function.
+
+6. Now, go back to the **get_queryset** method and if the *tags* or *ingredients* variable have any value assigned we'll convert these *tags* and *ingredients* using our **_params_to_ints** function and assign it to new variable, then filter **queryset** with our new variable.
+
+``` Python
+    if tags:
+        tag_ids = self._params_to_ints(tags)
+        queryset = queryset.filter(tags__id__in=tag_ids)
+
+    if ingredients:
+        ingredient_ids = self._params_to_ints(ingredients)
+        queryset = queryset.filter(ingredients__id__in=ingredient_ids)
+```
+
+The **tags__id__in** is the Django syntax for filtering on **foreign key** objects. For example we have a tags field in our queryset in a **Recipe** queryset and that has a **foreign key** to the **tags** table which has an ID. So this basically says *"return all of the tags where the ID is in..."* e.g this converted list that we provided.
+
+7. Final step is to change the return instruction in which we want to pass in filtered queryset, so it should look like this: `return queryset.filter(user=self.request.user)`.
+
+8. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command. Then test new feature in the browser.
+
+#### Add tests for filtering tags and ingredients
+
+Next, we're going to add a feature to our API so we can filter tags and ingredients that are assigned to recipes only. We might want to use this filter if we're creating a front-end application that has a drop-down list that we can use to filter recipes by tags and ingredients. In that drop-down we might only want to see the list of tags and ingredients that are actually assigned to recipes already. We might want to exclude any tags and ingredients that are not assigned to any recipes. We're going to start by adding some unit tests.
+
+1. Open up the *test_tags_api.py* and start by **importing the Recipe model**.
+
+2. Scroll down to the bottom and add new test called **test_retrieve_tags_assigned_to_recipe** to test filtering tags by those assigned to recipes.
+
+3. Now, let's **create two tags and one recipe**, **assign one them to a recipe**, the other tag leave unassigned:
+
+``` Python
+    tag1 = Tag.objects.create(user=self.user, name='Breakfast')
+    tag2 = Tag.objects.create(user=self.user, name='Lunch')
+    recipe = Recipe.objects.create(
+        title='Coriander eggs on toast',
+        time_minutes=10,
+        price=5.00,
+        user=self.user
+    )
+    recipe.tags.add(tag1)
+```
+
+4. Next **make HTTP GET request** to our API with the **assigned_only** filter set to 1, because we expect it to return an element. If there would be none therefore it would be set to 0.
+
+``` Python
+    res = self.client.get(TAGS_URL, {'assigned_only': 1})
+```
+
+We pass in this dictionary with the **get parameters** we want to apply to our **GET request**. We're going to call our filter **assigned_only** and if we pass in a one then this will be evaluated to *True* and it will filter by the tags that are *assigned_only*.
+
+5. Then **serialize our tags** and **check that only the tag that is assigned to a recipe gets returned**:
+
+``` Python
+    serializer1 = TagSerializer(tag1)
+    serializer2 = TagSerializer(tag2)
+
+    self.assertIn(serializer1.data, res.data)
+    self.assertNotIn(serializer2.data, res.data)
+```
+
+6. Create new test called **test_retrieve_tags_assigned_unique** which will test that the when we apply our filter returned tags will be unique. We do this because when we filter against a related object it can return one item per item that it is assigned to. If we have **two recipes** and we have **one tag** assigned to both of those recipes then when we filter by *assigned_only* those tags will return twice so it will return one for every item that it's assigned to. We need to make sure we return a distinct set of results.
+
+7. Start by **creating a single tag** assigned to variable: `tag = Tag.objects.create(user=self.user, name='Breakfast')`.
+
+8. **Create a secondary tag** that is not assigned to anything: `Tag.objects.create(user=self.user, name='Lunch')`. We don't assign it to any variable, because we only want to return the first tag.
+
+9. **Create two recipes** and **add our tag** to them:
+
+``` Python
+    recipe1 = Recipe.objects.create(
+        title='Pancakes',
+        time_minutes=5,
+        price=3.00,
+        user=self.user
+    )
+    recipe1.tags.add(tag)
+    recipe2 = Recipe.objects.create(
+        title='Porridge',
+        time_minutes=3,
+        price=2.00,
+        user=self.user
+    )
+    recipe2.tags.add(tag)
+```
+
+10. **Make HTTP GET request to our TAGS_URL** and we pass in the **assigned_only** field set to 1:
+
+``` Python
+    res = self.client.get(TAGS_URL, {'assigned_only': 1})
+```
+
+11. **Make an assertion** so we expect the data returned form our request will contain only one element:
+
+``` Python
+    self.assertEqual(len(res.data), 1)
+```
+
+12. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+13. Now head over to the **test_ingredients_api.py** and we'll add similar tests:
+
+- **import Recipe model**,
+
+- **test_retrieve_inredients_assigned_to_recipes**:
+
+``` Python
+def test_retrieve_inredients_assigned_to_recipes(self):
+    """Test filtering ingredients by those assigned to recipes."""
+    ingredient1 = Ingredient.objects.create(user=self.user, name='Apples')
+    ingredient2 = Ingredient.objects.create(user=self.user, name='Turkey')
+    recipe = Recipe.objects.create(
+        title='Apple crumble',
+        time_minutes=5,
+        price=10.00,
+        user=self.user
+    )
+    recipe.ingredients.add(ingredient1)
+    res = self.client.get(INGREDIENTS_URL, {'assigned_only': 1})
+    serializer1 = IngredientSerializer(ingredient1)
+    serializer2 = IngredientSerializer(ingredient2)
+
+    self.assertIn(serializer1.data, res.data)
+    self.assertNotIn(serializer2.data, res.data)
+```
+
+- **test_retieve_ingredient_assigned_unique**:
+
+``` Python
+def test_retieve_ingredient_assigned_unique(self):
+    """Test filtering ingredients by assigned returns unique items."""
+    ingredient = Ingredient.objects.create(user=self.user, name='Eggs')
+    Ingredient.objects.create(user=self.user, name='Cheese')
+    recipe1 = Recipe.objects.create(
+        title='Eggs benedict',
+        time_minutes=30,
+        price=12.00,
+        user=self.user
+    )
+    recipe1.ingredients.add(ingredient)
+    recipe2 = Recipe.objects.create(
+        title='Coriander eggs on toast',
+        time_minutes=20,
+        price=5.00,
+        user=self.user
+    )
+    recipe2.ingredients.add(ingredient)
+    res = self.client.get(INGREDIENTS_URL, {'assigned_only': 1})
+    self.assertEqual(len(res.data), 1)
+```
+
+14. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command.
+
+#### Implemented feature for filtering tags and ingredients
+
+Next we're going to implement our feature to filter by assigned tags and ingredients.
+
+1. Start by heading over to *views.py*.
+
+2. We've inherited both our **tags** and our **ingredients** ViewsSets from **BaseRecipeAttrViewSet**. Now, all we need to do is modify *BaseRecipeAttrViewSet*'s **get_queryset** to apply the filters **if the assigned_only query parameter has been passed in**.
+
+3. Inside **get_queryset** method create new variable called **assigned_only** and we'll going to convert our query parameter to an **integer** first and then we're going to convert it to a **boolean**.
+
+The reason we pass it in as an **integer** first is because our *assigned_only* value is going to be a **0** or a **1**. They're going to be the supported values for *assigned_only*.
+
+We need to do is first convert that to an **integer** and then convert to a **boolean** otherwise if we do **boolean** of a **string** with **'0'** in it then that will convert to *True* which will mean *assigned_only* will be *True* regardless what we put in our string as far as any value has been passed in.
+
+``` Python
+    assigned_only = bool(
+            int(self.request.query_params.get('assigned_only', 0))
+        )
+```
+
+If we run our tests without **assigned_only** set by default to **0** it would return an error `int argument must be a string not a non type`. This is because if *assigned_only* doesn't get a value passed then that will convert that to **None**. So this will return **None** and we can't convert an integer to **None**. That's why we add a comma after *assigned_only* and we're going to set a default value of **0**.
+
+4. Next we want to use our filtered queryset so type: `queryset = self.queryset`.
+
+5. Now we'll have condition **if assigned_only converts to true** then we'll do the filtering logic on our queryset to return these objects which recipe's field is not **Null**:
+
+``` Python
+    if assigned_only:
+            queryset = queryset.filter(recipe__isnull=False)
+```
+
+This will return only *tags* or *ingredients* that are assigned to *recipes*.
+
+6. Now we need to update the return to return filtered queryset:
+
+``` Python
+    return queryset.filter(
+            user=self.request.user
+        ).order_by('-name').distinct()
+```
+
+Now to make sure that returned objects are unique in the way that the items are not duplicated, so it won't return one item for every related item from queryset we add this **distinct()** at the end so it makes sure that the objects returned from queryset are unique.
+
+7. Save file and head over to our terminal and let's run our unit tests using `docker-compose run --rm app sh -c "python manage.py test && flake8"` or, if it doesn't work `sudo docker-compose run --rm app sh -c "python manage.py test && flake8"` command. Then test new feature in the browser.
